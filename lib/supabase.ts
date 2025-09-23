@@ -41,11 +41,11 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         return item;
       },
       setItem: (key, value) => {
-        console.log('トークンを保存:', key);
+        console.log('トークンを保存:', key.replace(/token|key|password/gi, '***'));
         localStorage.setItem(key, value);
       },
       removeItem: (key) => {
-        console.log('トークンを削除:', key);
+        console.log('トークンを削除:', key.replace(/token|key|password/gi, '***'));
         localStorage.removeItem(key);
       },
     } : {
@@ -70,7 +70,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       },
       setItem: async (key, value) => {
         try {
-          console.log('トークンを保存:', key);
+          console.log('トークンを保存:', key.replace(/token|key|password/gi, '***'));
           await AsyncStorage.setItem(key, value);
         } catch (error) {
           console.error('AsyncStorage setItem エラー:', error);
@@ -78,7 +78,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       },
       removeItem: async (key) => {
         try {
-          console.log('トークンを削除:', key);
+          console.log('トークンを削除:', key.replace(/token|key|password/gi, '***'));
           await AsyncStorage.removeItem(key);
         } catch (error) {
           console.error('AsyncStorage removeItem エラー:', error);

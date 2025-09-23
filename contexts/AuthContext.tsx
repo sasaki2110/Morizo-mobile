@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { showErrorAlert } from '../utils/alert';
+import { logAuth, logSession, logStorage, safeLog, LogCategory } from '../lib/logging';
 
 // 認証コンテキストの型定義
 interface AuthContextType {
@@ -32,6 +33,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
 
+  // ロギング初期化
+  useEffect(() => {
+    safeLog.info(LogCategory.AUTH, 'AuthProvider初期化開始');
+  }, []);
+
   // セッション有効性チェック関数
   const isSessionValid = (session: Session | null) => {
     if (!session?.access_token || !session?.expires_at) return false;
@@ -42,7 +48,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const margin = 5 * 60; // 5分
     
     const isValid = expiresAt > (now + margin);
-    console.log('セッション有効性チェック:', { 
+    
+    // ログ出力
+    safeLog.debug(LogCategory.AUTH, 'セッション有効性チェック', { 
       expiresAt, 
       now, 
       margin, 
@@ -54,19 +62,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // 無効セッションクリア関数
   const clearInvalidSession = async () => {
-    console.log('無効セッションをクリアします');
+    safeLog.info(LogCategory.AUTH, '無効セッションをクリアします');
     setSession(null);
     setUser(null);
     try {
       await supabase.auth.signOut();
+      await logSession('clear_invalid_session');
     } catch (error) {
-      console.error('セッションクリアエラー:', error);
+      safeLog.error(LogCategory.AUTH, 'セッションクリアエラー', { error: error.message });
     }
   };
 
   // セッション強制クリア関数（デバッグ用）
   const clearSession = async () => {
-    console.log('セッションを強制クリアします');
+    safeLog.info(LogCategory.AUTH, 'セッションを強制クリアします');
     setSession(null);
     setUser(null);
     
@@ -74,14 +83,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       localStorage.removeItem('sb-pidcexsxgyfsnosglzjt-auth-token');
       localStorage.removeItem('supabase.auth.token');
+      await logStorage('clear_localStorage', 'auth-token');
     } else {
       // モバイル版ではAsyncStorageをクリア
       try {
         await AsyncStorage.removeItem('sb-pidcexsxgyfsnosglzjt-auth-token');
         await AsyncStorage.removeItem('supabase.auth.token');
-        console.log('AsyncStorageからセッションをクリアしました');
+        await logStorage('clear_AsyncStorage', 'auth-token');
+        safeLog.info(LogCategory.AUTH, 'AsyncStorageからセッションをクリアしました');
       } catch (error) {
-        console.error('AsyncStorageクリアエラー:', error);
+        safeLog.error(LogCategory.AUTH, 'AsyncStorageクリアエラー', { error: error.message });
       }
     }
   };
@@ -142,47 +153,47 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // 認証状態の変更を監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
-        console.log('Session:', session);
+        const maskedEmail = session?.user?.email?.replace(/(.{2}).*(@.*)/, '$1***$2');
+        safeLog.debug(LogCategory.AUTH, 'Auth state changed', { event, email: maskedEmail });
         
         switch (event) {
           case 'SIGNED_IN':
             if (session && isSessionValid(session)) {
-              console.log('ログイン成功:', session.user?.email);
+              safeLog.info(LogCategory.AUTH, 'ログイン成功', { email: maskedEmail });
               setSession(session);
               setUser(session.user);
             } else {
-              console.log('無効なログインセッション');
+              safeLog.warn(LogCategory.AUTH, '無効なログインセッション');
               await clearInvalidSession();
             }
             break;
             
           case 'SIGNED_OUT':
-            console.log('ユーザーがログアウトしました');
+            safeLog.info(LogCategory.AUTH, 'ユーザーがログアウトしました');
             setSession(null);
             setUser(null);
             break;
             
           case 'TOKEN_REFRESHED':
             if (session && isSessionValid(session)) {
-              console.log('トークン更新成功:', session.user?.email);
+              safeLog.info(LogCategory.AUTH, 'トークン更新成功', { email: maskedEmail });
               setSession(session);
               setUser(session.user);
             } else {
-              console.log('無効な更新トークン');
+              safeLog.warn(LogCategory.AUTH, '無効な更新トークン');
               await clearInvalidSession();
             }
             break;
             
           case 'USER_UPDATED':
             if (session?.user) {
-              console.log('ユーザー情報更新:', session.user.email);
+              safeLog.info(LogCategory.AUTH, 'ユーザー情報更新', { email: maskedEmail });
               setUser(session.user);
             }
             break;
             
           default:
-            console.log('その他の認証イベント:', event);
+            safeLog.debug(LogCategory.AUTH, 'その他の認証イベント', { event });
             if (session && isSessionValid(session)) {
               setSession(session);
               setUser(session.user);
@@ -201,46 +212,115 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // サインイン関数
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    const timer = safeLog.timer('sign-in');
+    try {
+      safeLog.info(LogCategory.AUTH, 'サインイン処理開始', { email: email.replace(/(.{2}).*(@.*)/, '$1***$2') });
+      
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        await logAuth('signin', email, false, { error: error.message });
+        safeLog.error(LogCategory.AUTH, 'サインイン失敗', { error: error.message });
+      } else {
+        await logAuth('signin', email, true);
+        safeLog.info(LogCategory.AUTH, 'サインイン成功');
+      }
+      
+      timer();
+      return { error };
+    } catch (error) {
+      await logAuth('signin', email, false, { error: error.message });
+      safeLog.error(LogCategory.AUTH, 'サインイン処理エラー', { error: error.message });
+      timer();
+      return { error };
+    }
   };
 
   // サインアップ関数
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    return { error };
+    const timer = safeLog.timer('sign-up');
+    try {
+      safeLog.info(LogCategory.AUTH, 'サインアップ処理開始', { email: email.replace(/(.{2}).*(@.*)/, '$1***$2') });
+      
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      
+      if (error) {
+        await logAuth('signup', email, false, { error: error.message });
+        safeLog.error(LogCategory.AUTH, 'サインアップ失敗', { error: error.message });
+      } else {
+        await logAuth('signup', email, true);
+        safeLog.info(LogCategory.AUTH, 'サインアップ成功');
+      }
+      
+      timer();
+      return { error };
+    } catch (error) {
+      await logAuth('signup', email, false, { error: error.message });
+      safeLog.error(LogCategory.AUTH, 'サインアップ処理エラー', { error: error.message });
+      timer();
+      return { error };
+    }
   };
 
   // Google認証関数
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-    });
-    return { error };
+    const timer = safeLog.timer('google-signin');
+    try {
+      safeLog.info(LogCategory.AUTH, 'Google認証処理開始');
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+      });
+      
+      if (error) {
+        await logAuth('google_signin', undefined, false, { error: error.message });
+        safeLog.error(LogCategory.AUTH, 'Google認証失敗', { error: error.message });
+      } else {
+        await logAuth('google_signin', undefined, true);
+        safeLog.info(LogCategory.AUTH, 'Google認証成功');
+      }
+      
+      timer();
+      return { error };
+    } catch (error) {
+      await logAuth('google_signin', undefined, false, { error: error.message });
+      safeLog.error(LogCategory.AUTH, 'Google認証処理エラー', { error: error.message });
+      timer();
+      return { error };
+    }
   };
 
   // サインアウト関数
   const signOut = async () => {
+    const timer = safeLog.timer('sign-out');
     try {
+      safeLog.info(LogCategory.AUTH, 'サインアウト処理開始');
+      
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error('サインアウトエラー:', error);
+        safeLog.error(LogCategory.AUTH, 'サインアウトエラー', { error: error.message });
         showErrorAlert(`ログアウトに失敗しました: ${error.message}`);
+        timer();
         return;
       }
+      
       // ログアウト成功時は状態を即座にクリア
       setSession(null);
       setUser(null);
-      console.log('ログアウト成功');
+      await logAuth('signout', user?.email, true);
+      await logSession('signout', session?.access_token ? 'has_token' : 'no_token');
+      safeLog.info(LogCategory.AUTH, 'ログアウト成功');
+      timer();
     } catch (error) {
-      console.error('サインアウトで予期しないエラー:', error);
+      safeLog.error(LogCategory.AUTH, 'サインアウトで予期しないエラー', { error: error.message });
       showErrorAlert('ログアウトに失敗しました');
+      timer();
     }
   };
 

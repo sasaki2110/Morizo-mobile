@@ -4,22 +4,36 @@ import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { showErrorAlert, showSuccessAlert } from '../utils/alert';
+import { logAPI, logComponent, safeLog, LogCategory } from '../lib/logging';
 
 export default function MainScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiResponse, setApiResponse] = useState<string>('');
   const { user, session, signOut } = useAuth();
 
+  // コンポーネント初期化ログ
+  React.useEffect(() => {
+    logComponent('MainScreen', 'component_mounted', { 
+      hasUser: !!user, 
+      hasSession: !!session,
+      platform: Platform.OS 
+    });
+  }, []);
+
   // 認証状態の確認
   const isAuthenticated = !!(session && user && session.user?.id === user.id);
   
-  console.log('MainScreen - 認証状態:', isAuthenticated);
-  console.log('MainScreen - user:', user?.email);
-  console.log('MainScreen - session:', !!session);
+  // 認証状態ログ
+  safeLog.debug(LogCategory.AUTH, 'MainScreen認証状態確認', { 
+    isAuthenticated, 
+    hasUser: !!user, 
+    hasSession: !!session,
+    userId: user?.id 
+  });
 
   // 未認証の場合は何もしない（App.tsxでLoginScreenに遷移するはず）
   if (!isAuthenticated) {
-    console.log('MainScreen - 未認証のため何も表示しません');
+    safeLog.warn(LogCategory.AUTH, 'MainScreen未認証のため何も表示しません');
     return null;
   }
 
@@ -41,21 +55,29 @@ export default function MainScreen() {
   };
 
   const callAPI = async () => {
+    const timer = safeLog.timer('api-call');
     setIsLoading(true);
     setApiResponse('');
     
     try {
       const apiUrl = getApiUrl();
-      console.log('API URL:', apiUrl);
+      safeLog.info(LogCategory.API, 'API呼び出し開始', { url: apiUrl });
       
       // 認証トークンを取得
       const { data: { session: currentSession } } = await supabase.auth.getSession();
       
       if (!currentSession?.access_token) {
-        setApiResponse('認証トークンが取得できません');
-        showErrorAlert('認証トークンが取得できません');
+        const errorMsg = '認証トークンが取得できません';
+        setApiResponse(errorMsg);
+        showErrorAlert(errorMsg);
+        safeLog.error(LogCategory.AUTH, '認証トークン取得失敗');
+        timer();
         return;
       }
+
+      safeLog.debug(LogCategory.AUTH, '認証トークン取得成功', { 
+        tokenLength: currentSession.access_token.length 
+      });
 
       // Authorizationヘッダーにトークンを含めてAPIを呼び出し
       const response = await fetch(apiUrl, {
@@ -72,12 +94,17 @@ export default function MainScreen() {
       
       const data = await response.json();
       setApiResponse(JSON.stringify(data, null, 2));
+      
+      await logAPI('GET', apiUrl, response.status, { responseLength: JSON.stringify(data).length });
       showSuccessAlert(`API呼び出しが成功しました！\nURL: ${apiUrl}`);
+      
+      timer();
     } catch (error) {
-      console.error('API呼び出しエラー:', error);
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      safeLog.error(LogCategory.API, 'API呼び出しエラー', { error: errorMessage });
       showErrorAlert(`API呼び出しに失敗しました: ${errorMessage}`);
       setApiResponse(`エラー: ${errorMessage}`);
+      timer();
     } finally {
       setIsLoading(false);
     }
@@ -85,10 +112,11 @@ export default function MainScreen() {
 
   const handleSignOut = async () => {
     try {
+      logComponent('MainScreen', 'signout_button_clicked');
       await signOut();
-      // ログアウト成功メッセージは削除（AuthContextで処理される）
-      console.log('ログアウト処理完了');
+      logComponent('MainScreen', 'signout_completed');
     } catch (error) {
+      safeLog.error(LogCategory.AUTH, 'MainScreenログアウトエラー', { error: error.message });
       showErrorAlert('ログアウトに失敗しました');
     }
   };

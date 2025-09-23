@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { showErrorAlert, showSuccessAlert } from '../utils/alert';
+import { logAuth, logComponent, safeLog, LogCategory } from '../lib/logging';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -20,6 +21,11 @@ export default function LoginScreen() {
   
   const { signIn, signUp, signInWithGoogle } = useAuth();
 
+  // コンポーネント初期化ログ
+  React.useEffect(() => {
+    logComponent('LoginScreen', 'component_mounted');
+  }, []);
+
   const handleAuth = async () => {
     if (!email || !password) {
       showErrorAlert('メールアドレスとパスワードを入力してください');
@@ -28,16 +34,24 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      logComponent('LoginScreen', 'auth_button_clicked', { 
+        isSignUp, 
+        email: email.replace(/(.{2}).*(@.*)/, '$1***$2') 
+      });
+      
       const { error } = isSignUp 
         ? await signUp(email, password)
         : await signIn(email, password);
 
       if (error) {
+        await logAuth(isSignUp ? 'signup' : 'signin', email, false, { error: error.message });
         showErrorAlert(error.message);
       } else if (isSignUp) {
+        await logAuth('signup', email, true);
         showSuccessAlert('アカウントを作成しました。メールを確認してください。');
       }
     } catch (error) {
+      await logAuth(isSignUp ? 'signup' : 'signin', email, false, { error: error.message });
       showErrorAlert('認証に失敗しました');
     } finally {
       setLoading(false);
@@ -47,11 +61,15 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
+      logComponent('LoginScreen', 'google_auth_button_clicked');
+      
       const { error } = await signInWithGoogle();
       if (error) {
+        await logAuth('google_signin', undefined, false, { error: error.message });
         showErrorAlert(error.message);
       }
     } catch (error) {
+      await logAuth('google_signin', undefined, false, { error: error.message });
       showErrorAlert('Google認証に失敗しました');
     } finally {
       setLoading(false);
