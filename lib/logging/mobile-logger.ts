@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LogEntry, LogCategory, LogLevel, LogConfig, DEFAULT_LOG_CONFIG } from './types';
+// import { logStorageFixed } from './storage/log-storage-fixed';
 
 // モバイル用ロギングクラス
 export class MobileLogger {
@@ -39,6 +40,12 @@ export class MobileLogger {
     // ストレージ出力
     if (this.config.enableStorage) {
       await this.logToStorage(logEntry);
+      // 修正版ログストレージにも保存（一時的に無効化）
+      // try {
+      //   await logStorageFixed.saveLog(logEntry);
+      // } catch (error) {
+      //   console.error('ログストレージ保存エラー:', error);
+      // }
     }
   }
 

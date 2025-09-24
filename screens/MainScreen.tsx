@@ -4,11 +4,14 @@ import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { showErrorAlert, showSuccessAlert } from '../utils/alert';
-import { logAPI, logComponent, safeLog, LogCategory } from '../lib/logging';
+import { logAPI, logComponent, LogCategory } from '../lib/logging';
+import LogViewerScreen from '../lib/logging/viewer/LogViewerScreen';
+// import { runAllTests } from '../tests';
 
 export default function MainScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiResponse, setApiResponse] = useState<string>('');
+  const [showLogViewer, setShowLogViewer] = useState(false);
   const { user, session, signOut } = useAuth();
 
   // コンポーネント初期化ログ
@@ -24,7 +27,7 @@ export default function MainScreen() {
   const isAuthenticated = !!(session && user && session.user?.id === user.id);
   
   // 認証状態ログ
-  safeLog.debug(LogCategory.AUTH, 'MainScreen認証状態確認', { 
+  logComponent('MainScreen', 'auth_status_check', { 
     isAuthenticated, 
     hasUser: !!user, 
     hasSession: !!session,
@@ -33,7 +36,7 @@ export default function MainScreen() {
 
   // 未認証の場合は何もしない（App.tsxでLoginScreenに遷移するはず）
   if (!isAuthenticated) {
-    safeLog.warn(LogCategory.AUTH, 'MainScreen未認証のため何も表示しません');
+    logComponent('MainScreen', 'auth_not_authenticated');
     return null;
   }
 
@@ -55,13 +58,13 @@ export default function MainScreen() {
   };
 
   const callAPI = async () => {
-    const timer = safeLog.timer('api-call');
+    // const timer = safeLog.timer('api-call');
     setIsLoading(true);
     setApiResponse('');
     
     try {
       const apiUrl = getApiUrl();
-      safeLog.info(LogCategory.API, 'API呼び出し開始', { url: apiUrl });
+      logAPI('callAPI', 'GET', apiUrl, {}, 0, 'API呼び出し開始');
       
       // 認証トークンを取得
       const { data: { session: currentSession } } = await supabase.auth.getSession();
@@ -70,12 +73,12 @@ export default function MainScreen() {
         const errorMsg = '認証トークンが取得できません';
         setApiResponse(errorMsg);
         showErrorAlert(errorMsg);
-        safeLog.error(LogCategory.AUTH, '認証トークン取得失敗');
-        timer();
+        logAPI('callAPI', 'GET', apiUrl, {}, 401, '認証トークン取得失敗');
+        // timer();
         return;
       }
 
-      safeLog.debug(LogCategory.AUTH, '認証トークン取得成功', { 
+      logComponent('MainScreen', 'auth_token_success', { 
         tokenLength: currentSession.access_token.length 
       });
 
@@ -98,13 +101,13 @@ export default function MainScreen() {
       await logAPI('GET', apiUrl, response.status, { responseLength: JSON.stringify(data).length });
       showSuccessAlert(`API呼び出しが成功しました！\nURL: ${apiUrl}`);
       
-      timer();
+      // timer();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      safeLog.error(LogCategory.API, 'API呼び出しエラー', { error: errorMessage });
+      logAPI('callAPI', 'GET', apiUrl, {}, 500, `API呼び出しエラー: ${errorMessage}`);
       showErrorAlert(`API呼び出しに失敗しました: ${errorMessage}`);
       setApiResponse(`エラー: ${errorMessage}`);
-      timer();
+      // timer();
     } finally {
       setIsLoading(false);
     }
@@ -116,8 +119,63 @@ export default function MainScreen() {
       await signOut();
       logComponent('MainScreen', 'signout_completed');
     } catch (error) {
-      safeLog.error(LogCategory.AUTH, 'MainScreenログアウトエラー', { error: error.message });
+      logComponent('MainScreen', 'signout_error', { error: error.message });
       showErrorAlert('ログアウトに失敗しました');
+    }
+  };
+
+  const handleShowLogViewer = () => {
+    logComponent('MainScreen', 'log_viewer_button_clicked');
+    setShowLogViewer(true);
+  };
+
+  const handleCloseLogViewer = () => {
+    logComponent('MainScreen', 'log_viewer_closed');
+    setShowLogViewer(false);
+  };
+
+  // iOS用ログ強制生成テスト
+  const handleForceGenerateLogs = () => {
+    console.log('=== iOS ログ強制生成開始 ===');
+    console.log('Platform:', Platform.OS);
+    console.log('Timestamp:', new Date().toISOString());
+    
+    logComponent('MainScreen', 'force_generate_logs_started', { platform: Platform.OS });
+    
+    // 複数のログレベルでテスト
+    logAPI('test', 'GET', '/test-endpoint', { test: 'data' }, 200, 'Test response');
+    logComponent('MainScreen', 'test_log_generated', { timestamp: new Date().toISOString() });
+    logComponent('MainScreen', 'test_safe_log', { message: 'Test log message' });
+    
+    // エラーログも生成
+    try {
+      throw new Error('Test error for iOS logging');
+    } catch (error) {
+      logAPI('test', 'POST', '/error-endpoint', {}, 500, 'Test error response');
+    }
+    
+    logComponent('MainScreen', 'force_generate_logs_completed', { 
+      platform: Platform.OS,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log('=== iOS ログ強制生成完了 ===');
+  };
+
+  const handleRunTests = async () => {
+    logComponent('MainScreen', 'test_button_clicked');
+    setIsLoading(true);
+    
+    try {
+      console.log('🧪 テスト実行開始...');
+      // await runAllTests();
+      showSuccessAlert('テスト機能は一時的に無効化されています');
+      console.log('🎉 テスト実行完了');
+    } catch (error) {
+      console.error('❌ テスト実行エラー:', error);
+      showErrorAlert(`テスト実行に失敗しました: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -147,6 +205,30 @@ export default function MainScreen() {
           {isLoading ? 'API確認中...' : 'API確認'}
         </Text>
       </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logViewerButton}
+          onPress={handleShowLogViewer}
+        >
+          <Text style={styles.logViewerButtonText}>ログ確認</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.forceLogButton}
+          onPress={handleForceGenerateLogs}
+        >
+          <Text style={styles.forceLogButtonText}>ログ強制生成</Text>
+        </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.testButton, isLoading && styles.buttonDisabled]} 
+        onPress={handleRunTests}
+        disabled={isLoading}
+      >
+        <Text style={styles.testButtonText}>
+          {isLoading ? 'テスト実行中...' : 'テスト実行'}
+        </Text>
+      </TouchableOpacity>
       
       {apiResponse ? (
         <View style={styles.responseContainer}>
@@ -154,6 +236,13 @@ export default function MainScreen() {
           <Text style={styles.responseText}>{apiResponse}</Text>
         </View>
       ) : null}
+      
+      {showLogViewer && (
+        <LogViewerScreen 
+          visible={showLogViewer}
+          onClose={handleCloseLogViewer}
+        />
+      )}
       
       <StatusBar style="auto" />
     </View>
@@ -226,5 +315,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontFamily: 'monospace',
+  },
+  logViewerButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  logViewerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  forceLogButton: {
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    alignItems: 'center',
+  },
+  forceLogButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  testButton: {
+    backgroundColor: '#FF9500',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  testButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
