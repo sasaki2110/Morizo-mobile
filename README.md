@@ -111,18 +111,46 @@ docker-compose logs -f morizo-mobile
 - ✅ **ログフィルタリング**: レベル・カテゴリ・検索・日付フィルタ
 - ✅ **ターミナルログ**: 開発環境でのログ確認が可能
 
+### Phase 4.1: テキストチャット ✅ **完了（2025年1月27日）**
+
+#### **実装完了機能**
+- ✅ **チャット画面**: Web版を参考にしたモバイル版UI
+- ✅ **ユーザープロフィール**: アバター、メール表示、ログアウト機能
+- ✅ **チャット履歴**: メッセージ表示、タイムスタンプ、スクロール
+- ✅ **テキスト入力**: メッセージ入力・送信、文字数制限
+- ✅ **API連携**: Morizo Web APIとの認証付き通信
+- ✅ **メッセージ管理**: ユーザー・AIメッセージの表示・管理
+- ✅ **エラーハンドリング**: 適切なエラー処理・表示
+- ✅ **ログ機能**: チャット操作のログ記録
+
 #### **実装ファイル**
-- `lib/logging/mobile-logger.ts` - モバイルロギングクラス
-- `lib/logging/viewer/LogViewerScreen.tsx` - ログ表示画面
-- `lib/logging/storage/log-storage-fixed.ts` - ログストレージ管理
-- `lib/logging/storage/log-rotation.ts` - ログローテーション
-- `tests/` - テスト関数群
+- `screens/ChatScreen.tsx` - メインチャット画面
+- `App.tsx` - チャット画面への遷移設定
+- `screens/MainScreen.tsx` - チャット画面への遷移ボタン
+
+#### **テスト完了環境**
+- ✅ **Webエミュレーター**: 正常動作
+- ✅ **Android実機**: 正常動作
+- ⏳ **iOS実機**: 未テスト（将来テスト予定）
+
+#### **APIエンドポイント**
+- **Web版**: `http://localhost:3000/api/chat`
+- **Expo Go版**: `http://192.168.1.12:3000/api/chat`
 
 #### **開発環境でのログ確認**
 ```bash
 # ターミナルでログを確認
 npm start
 # Expo Goでアプリを操作すると、ターミナルにログが出力される
+```
+
+#### **開発環境でのチャット確認**
+```bash
+# Webエミュレーターでチャット機能をテスト
+npx expo start --web
+
+# Expo Go実機でチャット機能をテスト
+npx expo start --tunnel
 ```
 
 ## 既知の問題

@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import MainScreen from './screens/MainScreen';
+import ChatScreen from './screens/ChatScreen';
 import CustomSplashScreen from './components/SplashScreen';
 import { logComponent, safeLog, LogCategory } from './lib/logging';
 
@@ -59,7 +60,7 @@ function AppContent() {
   const isAuthenticated = !!(session && user && session.user?.id === user.id);
   safeLog.debug(LogCategory.AUTH, 'AppContent - 認証状態判定', { isAuthenticated });
 
-  return isAuthenticated ? <MainScreen /> : <LoginScreen />;
+  return isAuthenticated ? <ChatScreen /> : <LoginScreen />;
 }
 
 export default function App() {

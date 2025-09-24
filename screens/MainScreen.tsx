@@ -219,6 +219,16 @@ export default function MainScreen() {
         >
           <Text style={styles.forceLogButtonText}>ログ強制生成</Text>
         </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() => {
+            // TODO: チャット画面への遷移
+            showErrorAlert('チャット画面は準備中です');
+          }}
+        >
+          <Text style={styles.chatButtonText}>チャット画面</Text>
+        </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.testButton, isLoading && styles.buttonDisabled]} 
@@ -337,6 +347,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   forceLogButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  chatButton: {
+    backgroundColor: '#4caf50',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    alignItems: 'center',
+  },
+  chatButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
