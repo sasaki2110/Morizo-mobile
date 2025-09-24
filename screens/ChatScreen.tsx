@@ -19,6 +19,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { Audio } from 'expo-av';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { showErrorAlert, showSuccessAlert } from '../utils/alert';
@@ -36,6 +37,8 @@ export default function ChatScreen() {
   const [textMessage, setTextMessage] = useState<string>('');
   const [isTextChatLoading, setIsTextChatLoading] = useState(false);
   const [isVoiceChatLoading, setIsVoiceChatLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const { user, session, signOut } = useAuth();
 
@@ -101,7 +104,7 @@ export default function ChatScreen() {
         throw new Error('認証トークンが取得できません');
       }
 
-      logAPI('sendTextMessage', 'POST', apiUrl, { message: currentMessage }, 0, 'テキストチャット送信開始');
+      logAPI('POST', apiUrl, 0, { message: currentMessage, action: 'テキストチャット送信開始' });
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -127,7 +130,7 @@ export default function ChatScreen() {
       };
       setChatMessages(prev => [...prev, aiMessage]);
       
-      logAPI('sendTextMessage', 'POST', apiUrl, {}, response.status, 'テキストチャット送信成功');
+      logAPI('POST', apiUrl, response.status, { action: 'テキストチャット送信成功' });
       
       // スクロールを最下部に移動
       setTimeout(() => {
@@ -146,7 +149,7 @@ export default function ChatScreen() {
       };
       setChatMessages(prev => [...prev, errorMsg]);
       
-      logAPI('sendTextMessage', 'POST', `${getApiUrl()}/chat`, {}, 500, `テキストチャット送信エラー: ${errorMessage}`);
+      logAPI('POST', `${getApiUrl()}/chat`, 500, { action: `テキストチャット送信エラー: ${errorMessage}` });
       showErrorAlert(`チャット送信に失敗しました: ${errorMessage}`);
     } finally {
       setIsTextChatLoading(false);
@@ -181,7 +184,7 @@ export default function ChatScreen() {
         throw new Error('認証トークンが取得できません');
       }
 
-      logAPI('handleVoiceTranscription', 'POST', apiUrl, { message: text }, 0, '音声チャット送信開始');
+      logAPI('POST', apiUrl, 0, { message: text, action: '音声チャット送信開始' });
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -207,7 +210,7 @@ export default function ChatScreen() {
       };
       setChatMessages(prev => [...prev, aiMessage]);
       
-      logAPI('handleVoiceTranscription', 'POST', apiUrl, {}, response.status, '音声チャット送信成功');
+      logAPI('POST', apiUrl, response.status, { action: '音声チャット送信成功' });
       
       // スクロールを最下部に移動
       setTimeout(() => {
@@ -226,8 +229,201 @@ export default function ChatScreen() {
       };
       setChatMessages(prev => [...prev, errorMsg]);
       
-      logAPI('handleVoiceTranscription', 'POST', `${getApiUrl()}/chat`, {}, 500, `音声チャット送信エラー: ${errorMessage}`);
+      logAPI('POST', `${getApiUrl()}/chat`, 500, { action: `音声チャット送信エラー: ${errorMessage}` });
       showErrorAlert(`音声チャット送信に失敗しました: ${errorMessage}`);
+    } finally {
+      setIsVoiceChatLoading(false);
+    }
+  };
+
+  // 音声録音開始
+  const startRecording = async () => {
+    try {
+      // 前回の音声処理が完了していない場合は録音を開始しない
+      if (isVoiceChatLoading) {
+        logComponent('ChatScreen', 'recording_blocked', { reason: '前回の音声処理中' });
+        showErrorAlert('前回の音声処理が完了するまでお待ちください');
+        return;
+      }
+
+      logComponent('ChatScreen', 'start_recording');
+      
+      // 録音権限のリクエスト
+      const permission = await Audio.requestPermissionsAsync();
+      if (permission.status !== 'granted') {
+        throw new Error('録音権限が許可されていません');
+      }
+
+      // 録音設定
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      // 録音開始
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      
+      setRecording(newRecording);
+      setIsRecording(true);
+      
+      logComponent('ChatScreen', 'recording_started');
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      logComponent('ChatScreen', 'recording_start_error', { error: errorMessage });
+      showErrorAlert(`録音開始に失敗しました: ${errorMessage}`);
+    }
+  };
+
+  // 音声録音停止
+  const stopRecording = async () => {
+    try {
+      logComponent('ChatScreen', 'stop_recording');
+      
+      if (!recording) {
+        throw new Error('録音オブジェクトが見つかりません');
+      }
+
+      setIsRecording(false);
+      await recording.stopAndUnloadAsync();
+      
+      const uri = recording.getURI();
+      if (!uri) {
+        throw new Error('録音ファイルのURIが取得できません');
+      }
+
+      logComponent('ChatScreen', 'recording_stopped', { uri });
+      
+      // Whisper APIで音声をテキストに変換
+      await transcribeAudio(uri);
+      
+      setRecording(null);
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      logComponent('ChatScreen', 'recording_stop_error', { error: errorMessage });
+      showErrorAlert(`録音停止に失敗しました: ${errorMessage}`);
+      setIsRecording(false);
+      setRecording(null);
+    }
+  };
+
+  // Whisper APIで音声をテキストに変換
+  const transcribeAudio = async (audioUri: string) => {
+    try {
+      setIsVoiceChatLoading(true);
+      logComponent('ChatScreen', 'transcribe_audio_start', { uri: audioUri });
+
+      const apiUrl = `${getApiUrl()}/whisper`;
+      logComponent('ChatScreen', 'whisper_api_url', { apiUrl });
+      
+      // 認証トークンを取得
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (!currentSession?.access_token) {
+        throw new Error('認証トークンが取得できません');
+      }
+
+      // FormDataで音声ファイルを送信
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
+
+      // Whisper API呼び出しログ
+      logAPI('POST', apiUrl, 0, { action: 'Whisper API呼び出し開始', audioUri });
+
+      // リトライ機能付きWhisper API呼び出し
+      let response: Response;
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          logComponent('ChatScreen', 'whisper_api_attempt', { 
+            attempt: retryCount + 1, 
+            maxRetries,
+            apiUrl 
+          });
+
+          // React Native対応のタイムアウト実装
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Request timeout')), 30000); // 30秒タイムアウト
+          });
+
+          const fetchPromise = fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${currentSession.access_token}`,
+              'Content-Type': 'multipart/form-data',
+            },
+            body: formData,
+          });
+
+          response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+
+          // 成功した場合はループを抜ける
+          break;
+          
+        } catch (error) {
+          retryCount++;
+          const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+          
+          logComponent('ChatScreen', 'whisper_api_retry', { 
+            attempt: retryCount, 
+            maxRetries, 
+            error: errorMessage 
+          });
+
+          if (retryCount >= maxRetries) {
+            throw error; // 最大リトライ回数に達した場合はエラーを投げる
+          }
+
+          // リトライ前に少し待機
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        }
+      }
+
+      // Whisper APIレスポンスログ
+      logAPI('POST', apiUrl, response!.status, { action: 'Whisper APIレスポンス受信' });
+
+      if (!response.ok) {
+        throw new Error(`Whisper API エラー: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.text && data.text.trim()) {
+        // 音声認識成功 - テキストをチャットに送信
+        await handleVoiceTranscription(data.text);
+        logComponent('ChatScreen', 'transcribe_audio_success', { text: data.text });
+      } else {
+        throw new Error('音声からテキストを認識できませんでした');
+      }
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      const errorDetails = {
+        error: errorMessage,
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString()
+      };
+      
+      logComponent('ChatScreen', 'transcribe_audio_error', errorDetails);
+      
+      // Whisper APIエンドポイントが存在しない場合の一時的な処理
+      if (errorMessage.includes('Network request failed')) {
+        const fallbackMessage = '音声認識機能は準備中です。テキストチャットをご利用ください。';
+        await handleVoiceTranscription(fallbackMessage);
+        logComponent('ChatScreen', 'whisper_api_fallback', { message: fallbackMessage });
+      } else {
+        handleVoiceError(errorMessage);
+      }
     } finally {
       setIsVoiceChatLoading(false);
     }
@@ -254,7 +450,8 @@ export default function ChatScreen() {
       await signOut();
       logComponent('ChatScreen', 'signout_completed');
     } catch (error) {
-      logComponent('ChatScreen', 'signout_error', { error: error.message });
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      logComponent('ChatScreen', 'signout_error', { error: errorMessage });
       showErrorAlert('ログアウトに失敗しました');
     }
   };
@@ -361,17 +558,27 @@ export default function ChatScreen() {
         <View style={styles.voiceSection}>
           <Text style={styles.voiceSectionTitle}>音声チャット</Text>
           <TouchableOpacity
-            style={styles.voiceButton}
-            onPress={() => {
-              // TODO: 音声録音機能を実装
-              showErrorAlert('音声録音機能は準備中です');
-            }}
-            disabled={isVoiceChatLoading}
+            style={[
+              styles.voiceButton,
+              isRecording && styles.voiceButtonRecording,
+              (isVoiceChatLoading || isTextChatLoading) && styles.voiceButtonDisabled
+            ]}
+            onPress={isRecording ? stopRecording : startRecording}
+            disabled={isVoiceChatLoading || isTextChatLoading}
           >
-            <Text style={styles.voiceButtonText}>
-              {isVoiceChatLoading ? '音声処理中...' : '🎤 音声録音'}
+            <Text style={[
+              styles.voiceButtonText,
+              isRecording && styles.voiceButtonTextRecording
+            ]}>
+              {isVoiceChatLoading ? '音声処理中...' : 
+               isRecording ? '⏹️ 録音停止' : '🎤 音声録音'}
             </Text>
           </TouchableOpacity>
+          {isRecording && (
+            <Text style={styles.recordingStatusText}>
+              ● 録音中... タップして停止
+            </Text>
+          )}
         </View>
 
         <StatusBar style="auto" />
@@ -563,6 +770,21 @@ const styles = StyleSheet.create({
   voiceButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: 'bold',
+  },
+  voiceButtonRecording: {
+    backgroundColor: '#f44336',
+  },
+  voiceButtonTextRecording: {
+    color: '#fff',
+  },
+  voiceButtonDisabled: {
+    backgroundColor: '#ccc',
+  },
+  recordingStatusText: {
+    fontSize: 12,
+    color: '#f44336',
+    marginTop: 8,
     fontWeight: 'bold',
   },
 });

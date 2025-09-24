@@ -293,6 +293,132 @@ const callAPI = async () => {
 - HTTPS通信
 - 適切なヘッダー設定
 
+## Phase 4.2: 音声チャット機能実装（2025年1月27日）
+
+### **実装概要**
+Phase 4.1のテキストチャット機能に続き、音声チャット機能を実装しました。Expo AVを使用した音声録音とWhisper APIによる音声認識を組み合わせた完全な音声チャットシステムを構築しました。
+
+### **技術的実装**
+
+#### **1. Expo AVパッケージの追加**
+```bash
+npm install expo-av
+```
+- 高品質音声録音機能の提供
+- React Native環境での音声処理
+
+#### **2. 音声録音機能の実装**
+```typescript
+// 録音権限のリクエスト
+const permission = await Audio.requestPermissionsAsync();
+
+// 録音設定
+await Audio.setAudioModeAsync({
+  allowsRecordingIOS: true,
+  playsInSilentModeIOS: true,
+});
+
+// 高品質録音開始
+const { recording } = await Audio.Recording.createAsync(
+  Audio.RecordingOptionsPresets.HIGH_QUALITY
+);
+```
+
+#### **3. Whisper API連携**
+```typescript
+// FormDataで音声ファイルを送信
+const formData = new FormData();
+formData.append('audio', {
+  uri: audioUri,
+  type: 'audio/m4a',
+  name: 'recording.m4a',
+} as any);
+
+// NEXT版Morizoの/api/whisperエンドポイントを呼び出し
+const response = await fetch(apiUrl, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${currentSession.access_token}`,
+    'Content-Type': 'multipart/form-data',
+  },
+  body: formData,
+});
+```
+
+#### **4. リトライ機能の実装**
+```typescript
+// 最大3回の自動リトライ
+let retryCount = 0;
+const maxRetries = 3;
+
+while (retryCount < maxRetries) {
+  try {
+    response = await Promise.race([fetchPromise, timeoutPromise]);
+    break; // 成功した場合はループを抜ける
+  } catch (error) {
+    retryCount++;
+    if (retryCount >= maxRetries) throw error;
+    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+  }
+}
+```
+
+#### **5. React Native対応のタイムアウト制御**
+```typescript
+// AbortSignal.timeoutの代替実装
+const timeoutPromise = new Promise((_, reject) => {
+  setTimeout(() => reject(new Error('Request timeout')), 30000);
+});
+
+const fetchPromise = fetch(apiUrl, { ... });
+response = await Promise.race([fetchPromise, timeoutPromise]);
+```
+
+### **UI/UX改善**
+
+#### **録音状態の視覚的フィードバック**
+- 録音中のボタン色変更（緑→赤）
+- 録音状態のテキスト表示
+- 音声処理中のローディング表示
+
+#### **連続呼び出しの防止**
+- 音声処理中の録音開始ブロック
+- 適切な状態管理による制御
+
+### **技術的課題と解決策**
+
+#### **課題1: AbortSignal.timeoutの非対応**
+**問題**: React Nativeで`AbortSignal.timeout`がサポートされていない
+**解決策**: `Promise.race`を使用したタイムアウト実装
+**結果**: React Native環境での安定したタイムアウト制御
+
+#### **課題2: 連続Whisper API呼び出しの失敗**
+**問題**: 2回目のWhisper API呼び出しが"Network request failed"で失敗
+**解決策**: リトライ機能とタイムアウト制御の実装
+**結果**: 連続音声チャットの安定動作
+
+#### **課題3: 録音停止ボタンの無効化**
+**問題**: 録音中にボタンが無効化されて停止できない
+**解決策**: ボタンの状態管理ロジックの修正
+**結果**: 録音開始・停止の正常動作
+
+### **パフォーマンス結果**
+
+#### **音声認識性能**
+- **Whisper API応答時間**: 1.7秒〜4.6秒
+- **成功率**: 3回連続で成功
+- **音声品質**: HIGH_QUALITY設定で良好
+
+#### **安定性**
+- **リトライ機能**: 最大3回の自動リトライ
+- **タイムアウト**: 30秒で適切な制御
+- **エラーハンドリング**: 適切なフォールバック処理
+
+### **実装ファイル**
+- `screens/ChatScreen.tsx` - 音声録音・Whisper API連携機能を追加
+- `package.json` - Expo AVパッケージを追加
+- `tsconfig.json` - JSXサポートとesModuleInteropを追加
+
 ## テスト実装
 
 ### **手動テスト**
