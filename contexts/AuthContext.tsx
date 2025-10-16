@@ -302,24 +302,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       safeLog.info(LogCategory.AUTH, 'サインアウト処理開始');
       
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        safeLog.error(LogCategory.AUTH, 'サインアウトエラー', { error: error.message });
-        showErrorAlert(`ログアウトに失敗しました: ${error.message}`);
-        timer();
-        return;
-      }
-      
-      // ログアウト成功時は状態を即座にクリア
+      // まず状態を即座にクリア（エラーが出てもログアウトを確実に実行）
       setSession(null);
       setUser(null);
+      
+      // Supabaseのサインアウトを試みる
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        safeLog.warn(LogCategory.AUTH, 'Supabaseサインアウトエラー（状態はクリア済み）', { error: error.message });
+        // エラーが出てもローカルストレージをクリア
+        try {
+          await AsyncStorage.removeItem('supabase.auth.token');
+          await AsyncStorage.clear(); // 全クリア
+        } catch (storageError) {
+          safeLog.error(LogCategory.AUTH, 'ストレージクリアエラー', { error: storageError.message });
+        }
+        // エラーを表示するがログアウトは完了
+        // showErrorAlert(`ログアウトに失敗しましたが、ローカルセッションはクリアされました`);
+      }
+      
       await logAuth('signout', user?.email, true);
-      await logSession('signout', session?.access_token ? 'has_token' : 'no_token');
+      await logSession('signout', 'cleared');
       safeLog.info(LogCategory.AUTH, 'ログアウト成功');
       timer();
     } catch (error) {
       safeLog.error(LogCategory.AUTH, 'サインアウトで予期しないエラー', { error: error.message });
-      showErrorAlert('ログアウトに失敗しました');
+      // エラーが出てもセッションをクリア
+      setSession(null);
+      setUser(null);
+      // showErrorAlert('ログアウトに失敗しましたが、ローカルセッションはクリアされました');
       timer();
     }
   };
