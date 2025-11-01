@@ -28,16 +28,9 @@ import { generateSSESessionId } from '../lib/session-manager';
 import { isMenuResponse, parseMenuResponseUnified } from '../lib/menu-parser';
 import StreamingProgress from '../components/streaming/StreamingProgress';
 import RecipeViewerScreen from './RecipeViewerScreen';
-
-interface ChatMessage {
-  id: string;
-  type: 'user' | 'ai' | 'streaming';
-  content: string;
-  timestamp: Date;
-  sseSessionId?: string;
-  result?: unknown;
-  requiresConfirmation?: boolean;
-}
+import SelectionOptions from '../components/SelectionOptions';
+import { RecipeCandidate } from '../types/menu';
+import { ChatMessage } from '../types/chat';
 
 export default function ChatScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -48,6 +41,7 @@ export default function ChatScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState<boolean>(false);
   const [confirmationSessionId, setConfirmationSessionId] = useState<string | null>(null);
+  const [awaitingSelection, setAwaitingSelection] = useState<boolean>(false);
   const [showRecipeViewer, setShowRecipeViewer] = useState(false);
   const [recipeViewerData, setRecipeViewerData] = useState<{ response: string; result?: unknown } | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -511,6 +505,19 @@ export default function ChatScreen() {
     setRecipeViewerData(null);
   };
 
+  // レシピ選択処理
+  const handleSelection = (selection: number, selectionResult?: any) => {
+    setAwaitingSelection(false);
+    
+    // 選択結果メッセージを追加
+    setChatMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      type: 'user',
+      content: `${selection}番を選択しました`,
+      timestamp: new Date(),
+    }]);
+  };
+
   // ログアウト処理
   const handleSignOut = async () => {
     try {
@@ -592,8 +599,21 @@ export default function ChatScreen() {
                       </View>
                       <Text style={styles.messageContent}>{message.content}</Text>
                       
-                      {/* レシピレスポンスの場合はレシピ表示ボタンを追加 */}
-                      {(message.result?.menu_data || isMenuResponse(message.content)) && (
+                      {/* 選択UI表示（優先） */}
+                      {message.requiresSelection && message.candidates && message.taskId && (
+                        <View style={styles.selectionContainer}>
+                          <SelectionOptions
+                            candidates={message.candidates}
+                            onSelect={handleSelection}
+                            taskId={message.taskId}
+                            sseSessionId={message.sseSessionId || 'unknown'}
+                            isLoading={isTextChatLoading}
+                          />
+                        </View>
+                      )}
+                      
+                      {/* レシピレスポンスの場合はレシピ表示ボタンを追加（選択要求がない場合のみ） */}
+                      {!message.requiresSelection && (message.result?.menu_data || isMenuResponse(message.content)) && (
                         <TouchableOpacity
                           style={styles.recipeButton}
                           onPress={() => openRecipeViewer(message.content, message.result)}
@@ -615,16 +635,56 @@ export default function ChatScreen() {
                           // resultから確認情報を取得
                           const typedResult = result as {
                             response: string;
-                            menu_data?: unknown;
+                            menu_data?: {
+                              requires_selection?: boolean;
+                              candidates?: RecipeCandidate[];
+                              task_id?: string;
+                              current_stage?: 'main' | 'sub' | 'soup';
+                              used_ingredients?: string[];
+                              menu_category?: 'japanese' | 'western' | 'chinese';
+                            };
                             requires_confirmation?: boolean;
                             confirmation_session_id?: string;
                           } | undefined;
                           
                           console.log('[DEBUG] Checking requires_confirmation:', typedResult?.requires_confirmation);
                           console.log('[DEBUG] Checking confirmation_session_id:', typedResult?.confirmation_session_id);
+                          console.log('[DEBUG] Checking menu_data:', typedResult?.menu_data);
+                          console.log('[DEBUG] Checking requires_selection:', typedResult?.menu_data?.requires_selection);
+                          console.log('[DEBUG] Checking candidates:', typedResult?.menu_data?.candidates);
+                          console.log('[DEBUG] Checking task_id:', typedResult?.menu_data?.task_id);
                           
-                          // 曖昧性確認が必要な場合
-                          if (typedResult?.requires_confirmation && typedResult?.confirmation_session_id) {
+                          // 選択要求が必要な場合
+                          if (typedResult?.menu_data?.requires_selection && typedResult?.menu_data?.candidates && typedResult?.menu_data?.task_id) {
+                            console.log('[DEBUG] Setting awaitingSelection from SSE');
+                            setAwaitingSelection(true);
+                            
+                            // ストリーミング進捗表示をAIレスポンスに置き換え（選択要求フラグ付き）
+                            setChatMessages(prev => 
+                              prev.map((msg, idx) => 
+                                idx === index
+                                  ? { 
+                                      id: msg.id,
+                                      type: 'ai', 
+                                      content: typedResult.response, 
+                                      timestamp: msg.timestamp,
+                                      result: typedResult,
+                                      requiresSelection: true,
+                                      candidates: typedResult.menu_data?.candidates,
+                                      taskId: typedResult.menu_data?.task_id,
+                                      sseSessionId: msg.sseSessionId,
+                                      currentStage: typedResult.menu_data?.current_stage,
+                                      usedIngredients: typedResult.menu_data?.used_ingredients,
+                                      menuCategory: typedResult.menu_data?.menu_category
+                                    }
+                                  : msg
+                              )
+                            );
+                            
+                            // 選択要求時はローディング状態を終了
+                            setIsTextChatLoading(false);
+                          } else if (typedResult?.requires_confirmation && typedResult?.confirmation_session_id) {
+                            // 曖昧性確認が必要な場合
                             console.log('[DEBUG] Setting awaitingConfirmation from SSE');
                             setAwaitingConfirmation(true);
                             setConfirmationSessionId(typedResult.confirmation_session_id);
@@ -719,15 +779,15 @@ export default function ChatScreen() {
               placeholderTextColor="#999"
               multiline
               maxLength={1000}
-              editable={!isTextChatLoading && !isVoiceChatLoading}
+              editable={!isTextChatLoading && !isVoiceChatLoading && !awaitingSelection}
             />
             <TouchableOpacity
               style={styles.sendButton}
               onPress={sendTextMessage}
-              disabled={isTextChatLoading || !textMessage.trim()}
+              disabled={isTextChatLoading || !textMessage.trim() || awaitingSelection}
             >
               <Text style={styles.sendButtonText}>
-                {isTextChatLoading ? '送信中...' : '送信'}
+                {isTextChatLoading ? '送信中...' : awaitingSelection ? '選択中...' : '送信'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -997,5 +1057,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  selectionContainer: {
+    marginVertical: 8,
   },
 });

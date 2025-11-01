@@ -76,6 +76,12 @@ export interface RecipeCardProps {
   recipe: RecipeCard;
   /** URLクリック時のコールバック */
   onUrlClick?: (url: string) => void;
+  /** 選択状態 */
+  isSelected?: boolean;
+  /** 選択時のコールバック */
+  onSelect?: (recipe: RecipeCard) => void;
+  /** 採用済みかどうか */
+  isAdopted?: boolean;
 }
 
 /**
@@ -88,6 +94,10 @@ export interface MenuViewerProps {
   result?: unknown;
   /** カスタムスタイル */
   style?: any;
+  /** 選択状態の管理（オプション） */
+  selectedRecipes?: SelectedRecipes;
+  /** レシピ選択時のコールバック（オプション） */
+  onRecipeSelect?: (recipe: RecipeCard, category: 'main_dish' | 'side_dish' | 'soup', section: 'innovative' | 'traditional') => void;
 }
 
 /**
@@ -137,3 +147,88 @@ export const CATEGORY_EMOJI_MAP: Record<string, string> = {
   side: '🥗',
   soup: '🍵',
 };
+
+/**
+ * レシピ採用リクエストの型定義
+ */
+export interface RecipeAdoptionRequest {
+  recipes: RecipeAdoptionItem[];
+}
+
+export interface RecipeAdoptionItem {
+  title: string;
+  category: "main_dish" | "side_dish" | "soup";
+  menu_source: "llm_menu" | "rag_menu" | "manual";
+  url?: string;
+}
+
+/**
+ * 選択状態の管理用
+ */
+export interface SelectedRecipes {
+  main_dish: RecipeCard | null;
+  side_dish: RecipeCard | null;
+  soup: RecipeCard | null;
+}
+
+/**
+ * レシピ選択情報（セクション情報付き）
+ */
+export interface RecipeSelection {
+  recipe: RecipeCard;
+  category: 'main_dish' | 'side_dish' | 'soup';
+  section: 'innovative' | 'traditional';
+}
+
+/**
+ * 主菜候補の型定義（Phase 2B用）
+ */
+export interface RecipeCandidate {
+  /** レシピのタイトル */
+  title: string;
+  /** 食材リスト */
+  ingredients: string[];
+  /** 調理時間（オプション） */
+  cooking_time?: string;
+  /** 説明（オプション） */
+  description?: string;
+  /** カテゴリ */
+  category?: 'main' | 'sub' | 'soup';
+  /** ソース（LLM/RAG/Web） */
+  source?: 'llm' | 'rag' | 'web';
+  /** URL情報（新規追加） */
+  urls?: RecipeUrl[];
+}
+
+/**
+ * 選択リクエストの型定義
+ */
+export interface SelectionRequest {
+  /** タスクID */
+  task_id: string;
+  /** 選択番号（1-5） */
+  selection: number;
+  /** SSEセッションID */
+  sse_session_id: string;
+}
+
+/**
+ * 選択レスポンスの型定義
+ */
+export interface SelectionResponse {
+  /** 成功フラグ */
+  success: boolean;
+  /** メッセージ（オプション） */
+  message?: string;
+  /** エラーメッセージ（オプション） */
+  error?: string;
+  /** 次のステップ（オプション） */
+  next_step?: string;
+  /** 選択されたレシピ（オプション） */
+  selected_recipe?: {
+    category: string;
+    recipe: RecipeCandidate;
+  };
+  /** 次の段階が必要かどうか（オプション） */
+  requires_next_stage?: boolean;
+}

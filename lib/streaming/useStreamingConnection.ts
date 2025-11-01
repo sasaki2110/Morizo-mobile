@@ -133,10 +133,14 @@ export function useStreamingConnection({
 
             case 'complete':
               if (data.result) {
-                // デバッグログ: 確認情報の存在をチェック
+                // デバッグログ: 確認情報の存在をチェック（拡張版）
                 console.log('[DEBUG] SSE complete event received:', {
                   requires_confirmation: data.result.requires_confirmation,
-                  confirmation_session_id: data.result.confirmation_session_id
+                  confirmation_session_id: data.result.confirmation_session_id,
+                  requires_selection: data.result.requires_selection,
+                  candidates: data.result.candidates,
+                  task_id: data.result.task_id,
+                  full_result: data.result
                 });
                 
                 lastValidResultRef.current = data.result;
