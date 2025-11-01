@@ -14,7 +14,7 @@ const getApiUrl = () => {
 };
 
 // 認証付きfetch関数
-async function authenticatedFetch(url: string, options: RequestInit = {}) {
+export async function authenticatedFetch(url: string, options: RequestInit = {}) {
   // 認証トークンを取得
   const { data: { session } } = await supabase.auth.getSession();
   

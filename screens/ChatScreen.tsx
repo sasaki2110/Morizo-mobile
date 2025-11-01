@@ -29,8 +29,13 @@ import { isMenuResponse, parseMenuResponseUnified } from '../lib/menu-parser';
 import StreamingProgress from '../components/streaming/StreamingProgress';
 import RecipeViewerScreen from './RecipeViewerScreen';
 import SelectionOptions from '../components/SelectionOptions';
+import RecipeListModal from '../components/RecipeListModal';
+import SelectedRecipeCard from '../components/SelectedRecipeCard';
+import HistoryPanel from '../components/HistoryPanel';
+import UserProfileModal from '../components/UserProfileModal';
 import { RecipeCandidate } from '../types/menu';
 import { ChatMessage } from '../types/chat';
+import { saveMenu } from '../api/menu-api';
 
 export default function ChatScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -44,6 +49,22 @@ export default function ChatScreen() {
   const [awaitingSelection, setAwaitingSelection] = useState<boolean>(false);
   const [showRecipeViewer, setShowRecipeViewer] = useState(false);
   const [recipeViewerData, setRecipeViewerData] = useState<{ response: string; result?: unknown } | null>(null);
+  // Phase 2.3: レシピ一覧モーダルの状態管理
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
+  const [listModalCandidates, setListModalCandidates] = useState<RecipeCandidate[]>([]);
+  const [listModalCurrentStage, setListModalCurrentStage] = useState<'main' | 'sub' | 'soup' | undefined>(undefined);
+  // Phase 3.1: 選択済みレシピの状態管理
+  const [selectedRecipes, setSelectedRecipes] = useState<{
+    main?: RecipeCandidate;
+    sub?: RecipeCandidate;
+    soup?: RecipeCandidate;
+  }>({});
+  const [isSavingMenu, setIsSavingMenu] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string>('');
+  // Phase 3.2: 履歴パネルの状態管理
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  // UI改善: ユーザープロフィールモーダル
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const { user, session, signOut } = useAuth();
 
@@ -507,6 +528,17 @@ export default function ChatScreen() {
 
   // レシピ選択処理
   const handleSelection = (selection: number, selectionResult?: any) => {
+    // Phase 3.1: 選択したレシピ情報を取得して状態に保存
+    if (selectionResult && selectionResult.selected_recipe) {
+      const { category, recipe } = selectionResult.selected_recipe;
+      const categoryKey = category === 'main' ? 'main' : category === 'sub' ? 'sub' : 'soup';
+      
+      setSelectedRecipes(prev => ({
+        ...prev,
+        [categoryKey]: recipe
+      }));
+    }
+    
     setAwaitingSelection(false);
     
     // 選択結果メッセージを追加（ユニークID生成）
@@ -517,6 +549,110 @@ export default function ChatScreen() {
       content: `${selection}番を選択しました`,
       timestamp: new Date(),
     }]);
+  };
+
+  // Phase 2.3: レシピ一覧を見るハンドラー
+  const handleViewList = (candidates: RecipeCandidate[], currentStage?: 'main' | 'sub' | 'soup') => {
+    setListModalCandidates(candidates);
+    setListModalCurrentStage(currentStage);
+    setIsListModalOpen(true);
+  };
+
+  const closeListModal = () => {
+    setIsListModalOpen(false);
+    setListModalCandidates([]);
+    setListModalCurrentStage(undefined);
+  };
+
+  // Phase 2.4: 他の提案を見るハンドラー
+  const handleRequestMore = (sseSessionId: string) => {
+    // 新しいstreamingメッセージを追加（SSEセッションIDはSelectionOptionsから渡される）
+    const streamingMessage: ChatMessage = {
+      id: `streaming-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      type: 'streaming',
+      content: '追加提案を取得中...',
+      timestamp: new Date(),
+      sseSessionId: sseSessionId,
+    };
+    setChatMessages(prev => [...prev, streamingMessage]);
+    
+    // スクロールを最下部に移動
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    
+    console.log('[DEBUG] Added streaming message for additional proposal with SSE session:', sseSessionId);
+  };
+
+  // Phase 3.1: 献立保存機能の実装
+  const handleSaveMenu = async () => {
+    if (!selectedRecipes.main && !selectedRecipes.sub && !selectedRecipes.soup) {
+      Alert.alert('エラー', '保存するレシピがありません');
+      return;
+    }
+    
+    setIsSavingMenu(true);
+    setSavedMessage('');
+    
+    try {
+      console.log('[DEBUG] Saving menu with selectedRecipes:', selectedRecipes);
+      
+      // Web版と同じ方式: selectedRecipesを直接送信
+      const recipesToSave: { main?: any; sub?: any; soup?: any } = {};
+      
+      if (selectedRecipes.main) {
+        recipesToSave.main = {
+          title: selectedRecipes.main.title,
+          source: selectedRecipes.main.source || 'web',
+          url: selectedRecipes.main.urls && selectedRecipes.main.urls.length > 0 
+            ? selectedRecipes.main.urls[0].url 
+            : undefined,
+          ingredients: selectedRecipes.main.ingredients || []
+        };
+      }
+      
+      if (selectedRecipes.sub) {
+        recipesToSave.sub = {
+          title: selectedRecipes.sub.title,
+          source: selectedRecipes.sub.source || 'web',
+          url: selectedRecipes.sub.urls && selectedRecipes.sub.urls.length > 0 
+            ? selectedRecipes.sub.urls[0].url 
+            : undefined,
+          ingredients: selectedRecipes.sub.ingredients || []
+        };
+      }
+      
+      if (selectedRecipes.soup) {
+        recipesToSave.soup = {
+          title: selectedRecipes.soup.title,
+          source: selectedRecipes.soup.source || 'web',
+          url: selectedRecipes.soup.urls && selectedRecipes.soup.urls.length > 0 
+            ? selectedRecipes.soup.urls[0].url 
+            : undefined,
+          ingredients: selectedRecipes.soup.ingredients || []
+        };
+      }
+      
+      console.log('[DEBUG] Prepared recipes to save:', recipesToSave);
+      
+      const result = await saveMenu(recipesToSave);
+      
+      if (result.success) {
+        setSavedMessage(result.message || `${result.total_saved}つのレシピが保存されました`);
+        
+        setTimeout(() => {
+          setSavedMessage('');
+        }, 5000);
+      } else {
+        throw new Error(result.message || '保存に失敗しました');
+      }
+    } catch (error) {
+      console.error('Menu save failed:', error);
+      Alert.alert('エラー', '献立の保存に失敗しました。もう一度お試しください。');
+      setSavedMessage('');
+    } finally {
+      setIsSavingMenu(false);
+    }
   };
 
   // Phase 2.1修正: 次の段階をリクエストする関数（Web版に合わせて実装）
@@ -603,17 +739,33 @@ export default function ChatScreen() {
     }
   };
 
-  // ログアウト処理
-  const handleSignOut = async () => {
-    try {
-      logComponent('ChatScreen', 'signout_button_clicked');
-      await signOut();
-      logComponent('ChatScreen', 'signout_completed');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
-      logComponent('ChatScreen', 'signout_error', { error: errorMessage });
-      showErrorAlert('ログアウトに失敗しました');
-    }
+  // チャット履歴クリア処理
+  const clearChatHistory = () => {
+    setChatMessages([]);
+    setAwaitingConfirmation(false);
+    setConfirmationSessionId(null);
+    setAwaitingSelection(false);
+    // 選択済みレシピもクリア
+    setSelectedRecipes({});
+    setSavedMessage('');
+  };
+
+  const handleClearHistory = () => {
+    Alert.alert(
+      'チャット履歴をクリア',
+      'チャット履歴と選択済みレシピを削除しますか？',
+      [
+        {
+          text: 'キャンセル',
+          style: 'cancel',
+        },
+        {
+          text: 'クリア',
+          style: 'destructive',
+          onPress: clearChatHistory,
+        },
+      ]
+    );
   };
 
   return (
@@ -623,23 +775,18 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* ユーザープロフィールセクション */}
+        {/* ユーザープロフィールセクション（アバターアイコンのみ） */}
         <View style={styles.profileSection}>
-          <View style={styles.profileContainer}>
+          <TouchableOpacity
+            style={styles.avatarButton}
+            onPress={() => setIsProfileModalOpen(true)}
+          >
             <View style={styles.avatarContainer}>
               <Text style={styles.avatarText}>
                 {user?.email?.charAt(0).toUpperCase() || 'U'}
               </Text>
             </View>
-            <Text style={styles.welcomeText}>ようこそMorizoへ</Text>
-            <Text style={styles.emailText}>{user?.email}</Text>
-            <TouchableOpacity
-              style={styles.signOutButton}
-              onPress={handleSignOut}
-            >
-              <Text style={styles.signOutButtonText}>ログアウト</Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* チャット履歴エリア */}
@@ -697,6 +844,9 @@ export default function ChatScreen() {
                             usedIngredients={message.usedIngredients}
                             menuCategory={message.menuCategory}
                             onNextStageRequested={requestNextStage}
+                            onViewList={(candidates) => handleViewList(candidates, message.currentStage)}
+                            onRequestMore={handleRequestMore}
+                            isLatestSelection={index === chatMessages.length - 1 || chatMessages.slice(index + 1).every(msg => !msg.requiresSelection)}
                           />
                         </View>
                       )}
@@ -854,7 +1004,31 @@ export default function ChatScreen() {
                 </View>
               ))
             )}
+            
+            {/* Phase 3.1: 選択済みレシピの表示 */}
+            {(selectedRecipes.main || selectedRecipes.sub || selectedRecipes.soup) && (
+              <SelectedRecipeCard
+                main={selectedRecipes.main}
+                sub={selectedRecipes.sub}
+                soup={selectedRecipes.soup}
+                onSave={handleSaveMenu}
+                isSaving={isSavingMenu}
+                savedMessage={savedMessage}
+              />
+            )}
           </ScrollView>
+          
+          {/* クリアボタン */}
+          {chatMessages.length > 0 && (
+            <View style={styles.clearButtonContainer}>
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={handleClearHistory}
+              >
+                <Text style={styles.clearButtonText}>🗑️ クリア</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* テキストチャット入力欄 */}
@@ -925,6 +1099,30 @@ export default function ChatScreen() {
         result={recipeViewerData?.result}
         onClose={closeRecipeViewer}
       />
+
+      {/* Phase 2.3: レシピ一覧モーダル */}
+      <RecipeListModal
+        isOpen={isListModalOpen}
+        onClose={closeListModal}
+        candidates={listModalCandidates}
+        currentStage={listModalCurrentStage}
+      />
+
+      {/* Phase 3.2: 履歴パネル */}
+      <HistoryPanel
+        isOpen={isHistoryPanelOpen}
+        onClose={() => setIsHistoryPanelOpen(false)}
+      />
+
+      {/* UI改善: ユーザープロフィールモーダル */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        onOpenHistory={() => {
+          setIsProfileModalOpen(false);
+          setIsHistoryPanelOpen(true);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -940,48 +1138,28 @@ const styles = StyleSheet.create({
   profileSection: {
     backgroundColor: '#fff',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? 8 : 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    alignItems: 'flex-end',
   },
-  profileContainer: {
-    alignItems: 'center',
+  avatarButton: {
+    padding: 8,
+    marginTop: Platform.OS === 'android' ? 4 : 0,
   },
   avatarContainer: {
-    width: 60,
-    height: 60,
+    width: 44,
+    height: 44,
     backgroundColor: '#e3f2fd',
-    borderRadius: 30,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
   },
   avatarText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#1976d2',
-  },
-  welcomeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  emailText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 15,
-  },
-  signOutButton: {
-    backgroundColor: '#f44336',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  signOutButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   chatHistoryContainer: {
     flex: 1,
@@ -1149,5 +1327,21 @@ const styles = StyleSheet.create({
   },
   selectionContainer: {
     marginVertical: 8,
+  },
+  clearButtonContainer: {
+    alignItems: 'flex-end',
+    paddingTop: 8,
+    paddingRight: 8,
+  },
+  clearButton: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  clearButtonText: {
+    color: '#dc2626',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

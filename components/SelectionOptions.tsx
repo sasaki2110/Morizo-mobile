@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
 import { RecipeCandidate } from '../types/menu';
-import { sendSelection } from '../api/recipe-api';
+import { sendSelection, authenticatedFetch } from '../api/recipe-api';
 
 interface SelectionOptionsProps {
   candidates: RecipeCandidate[];
@@ -15,6 +15,12 @@ interface SelectionOptionsProps {
   menuCategory?: 'japanese' | 'western' | 'chinese';
   // Phase 2.1修正: 次の段階リクエスト用のコールバック
   onNextStageRequested?: () => void;
+  // Phase 2.3: レシピ一覧表示用のコールバック
+  onViewList?: (candidates: RecipeCandidate[]) => void;
+  // Phase 2.4: 他の提案を見る機能
+  onRequestMore?: (sseSessionId: string) => void;
+  isLatestSelection?: boolean;
+  proposalRound?: number;
 }
 
 const SelectionOptions: React.FC<SelectionOptionsProps> = ({
@@ -26,10 +32,81 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
   currentStage,
   usedIngredients,
   menuCategory,
-  onNextStageRequested
+  onNextStageRequested,
+  onViewList,
+  onRequestMore,
+  isLatestSelection,
+  proposalRound
 }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isRequestingMore, setIsRequestingMore] = useState(false);
+
+  // Phase 2.3: レシピ一覧を見るハンドラー
+  const handleViewList = () => {
+    if (onViewList) {
+      onViewList(candidates);
+    }
+  };
+
+  // Phase 2.4: 他の提案を見るハンドラー
+  const handleRequestMore = async () => {
+    if (isLoading || isConfirming || isRequestingMore) return;
+    
+    // 新しいSSEセッションIDを生成（既存のSSEセッションは切断済みのため）
+    const newSseSessionId = `additional-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('[DEBUG] Generated new SSE session for additional proposal:', newSseSessionId);
+    console.log('[DEBUG] Old SSE session ID:', sseSessionId);
+    
+    setIsRequestingMore(true);
+    
+    // 先にコールバックを呼び出してChatScreenにstreamingメッセージを追加してもらう
+    if (onRequestMore) {
+      onRequestMore(newSseSessionId);
+    }
+    
+    try {
+      // API URLを取得
+      const getApiUrl = () => {
+        if (Platform.OS === 'web') {
+          return 'http://localhost:3000/api';
+        } else {
+          return 'http://192.168.1.12:3000/api';
+        }
+      };
+      
+      const apiUrl = `${getApiUrl()}/chat/selection`;
+      
+      // バックエンドに追加提案を要求（新しいSSEセッションID + 旧セッションIDを送信）
+      const response = await authenticatedFetch(apiUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          task_id: taskId,
+          selection: 0, // 0 = 追加提案要求
+          sse_session_id: newSseSessionId,  // 新しいSSEセッションID
+          old_sse_session_id: sseSessionId  // 旧セッションID（コンテキスト復元用）
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[DEBUG] Request more response:', result);
+      
+      if (result.success) {
+        setSelectedIndex(null); // 選択状態をリセット
+      } else {
+        throw new Error(result.error || 'Request failed');
+      }
+    } catch (error) {
+      console.error('Request more failed:', error);
+      Alert.alert('エラー', '追加提案の要求に失敗しました。');
+    } finally {
+      setIsRequestingMore(false);
+    }
+  };
 
   const handleConfirm = async () => {
     if (isLoading || selectedIndex === null) return;
@@ -140,6 +217,41 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
         </TouchableOpacity>
       ))}
       
+      {/* Phase 2.3: レシピ一覧を見るボタン */}
+      {onViewList && candidates.length > 0 && (
+        <TouchableOpacity
+          onPress={handleViewList}
+          style={styles.viewListButton}
+        >
+          <Text style={styles.viewListButtonText}>
+            📋 レシピ一覧を見る
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Phase 2.4: 他の提案を見るボタン - 最新の選択候補のみ表示 */}
+      {isLatestSelection !== false && onRequestMore && (
+        <TouchableOpacity
+          onPress={handleRequestMore}
+          disabled={isLoading || isConfirming || isRequestingMore}
+          style={[
+            styles.requestMoreButton,
+            (isLoading || isConfirming || isRequestingMore) && styles.requestMoreButtonDisabled
+          ]}
+        >
+          <Text style={styles.requestMoreButtonText}>
+            他の提案を見る
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {isRequestingMore && (
+        <View style={styles.requestingMoreContainer}>
+          <ActivityIndicator size="small" color="#2563eb" />
+          <Text style={styles.requestingMoreText}>追加提案を取得中...</Text>
+        </View>
+      )}
+
       <TouchableOpacity
         onPress={handleConfirm}
         disabled={selectedIndex === null || isLoading || isConfirming}
@@ -280,6 +392,51 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   ingredientsList: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  // Phase 2.3: レシピ一覧を見るボタンのスタイル
+  viewListButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  viewListButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Phase 2.4: 他の提案を見るボタンのスタイル
+  requestMoreButton: {
+    backgroundColor: '#6366f1',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  requestMoreButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  requestMoreButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  requestingMoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  requestingMoreText: {
+    marginLeft: 8,
     fontSize: 14,
     color: '#6b7280',
   },

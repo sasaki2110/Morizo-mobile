@@ -22,6 +22,7 @@ export default function CustomSplashScreen({ onFinish }: SplashScreenProps) {
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const fadeAnim = useState(new Animated.Value(0))[0];
   const [isVisible, setIsVisible] = useState(true);
+  const [imageAspectRatio, setImageAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     // まずネイティブスプラッシュ画面を非表示にする
@@ -29,7 +30,13 @@ export default function CustomSplashScreen({ onFinish }: SplashScreenProps) {
 
     // ランダムに画像を選択
     const randomIndex = Math.floor(Math.random() * splashImages.length);
-    setSelectedImage(splashImages[randomIndex]);
+    const image = splashImages[randomIndex];
+    setSelectedImage(image);
+    
+    // 画像が正方形の場合、アスペクト比は1
+    // 実際の画像サイズが分かっている場合はここで設定
+    // 正方形なのでアスペクト比は1
+    setImageAspectRatio(1);
 
     // プラットフォームに応じてタイミングを調整
     const delay = Platform.OS === 'web' ? 100 : 500; // 実機では少し長めに待機
@@ -67,13 +74,35 @@ export default function CustomSplashScreen({ onFinish }: SplashScreenProps) {
     return null;
   }
 
+  // 画像サイズの計算（横方向に合わせる）
+  const imageWidth = width;
+  const imageHeight = imageAspectRatio ? width / imageAspectRatio : height;
+
+  // 画像サイズが取得できていない場合は表示しない
+  if (imageAspectRatio === null) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
         <Image
           source={selectedImage}
-          style={styles.image}
-          resizeMode="cover"
+          style={[
+            styles.image,
+            {
+              width: imageWidth,
+              height: imageHeight,
+            }
+          ]}
+          resizeMode="contain"
+          onLoad={(e) => {
+            // 画像ロード時に実際のサイズを取得してアスペクト比を更新
+            const source = e.nativeEvent?.source;
+            if (source?.width && source?.height) {
+              setImageAspectRatio(source.width / source.height);
+            }
+          }}
         />
       </Animated.View>
     </View>
@@ -85,7 +114,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#e0f2fe', // 薄い水色の背景
     position: 'absolute',
     top: 0,
     left: 0,
@@ -100,7 +129,6 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   image: {
-    width: width,
-    height: height,
+    // サイズは動的に計算される
   },
 });
