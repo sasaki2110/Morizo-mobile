@@ -9,6 +9,12 @@ interface SelectionOptionsProps {
   taskId: string;
   sseSessionId: string;
   isLoading?: boolean;
+  // Phase 2.1: 段階情報
+  currentStage?: 'main' | 'sub' | 'soup';
+  usedIngredients?: string[];
+  menuCategory?: 'japanese' | 'western' | 'chinese';
+  // Phase 2.1修正: 次の段階リクエスト用のコールバック
+  onNextStageRequested?: () => void;
 }
 
 const SelectionOptions: React.FC<SelectionOptionsProps> = ({
@@ -16,7 +22,11 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
   onSelect,
   taskId,
   sseSessionId,
-  isLoading = false
+  isLoading = false,
+  currentStage,
+  usedIngredients,
+  menuCategory,
+  onNextStageRequested
 }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -36,6 +46,12 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
       
       if (result.success) {
         onSelect(selectedIndex + 1, result);
+        
+        // Phase 2.1修正: 次の段階の提案が要求されている場合はフラグをチェック
+        if (result.requires_next_stage && onNextStageRequested) {
+          console.log('[DEBUG] requires_next_stage flag detected, calling onNextStageRequested');
+          onNextStageRequested();
+        }
       } else {
         throw new Error(result.error || 'Selection failed');
       }
@@ -57,8 +73,46 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
     );
   }
 
+  // Phase 2.1: 段階名の表示テキスト
+  const stageLabel = currentStage === 'main' ? '主菜' : currentStage === 'sub' ? '副菜' : currentStage === 'soup' ? '汁物' : '';
+  const menuCategoryLabel = menuCategory === 'japanese' ? '和食' : menuCategory === 'western' ? '洋食' : menuCategory === 'chinese' ? '中華' : '';
+
   return (
     <View style={styles.container}>
+      {/* Phase 2.1: 段階情報の表示 */}
+      {(currentStage || menuCategory) && (
+        <View style={styles.stageContainer}>
+          <View style={styles.badgeContainer}>
+            {currentStage && (
+              <View style={[styles.badge, styles.mainBadge, { marginRight: 8 }]}>
+                <Text style={styles.badgeText}>
+                  {stageLabel}を選んでください
+                </Text>
+              </View>
+            )}
+            {menuCategory && (
+              <View style={[styles.badge, styles.categoryBadge, { marginRight: 8 }]}>
+                <Text style={styles.badgeText}>
+                  {menuCategoryLabel}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+      
+      {/* Phase 2.1: 使い残し食材の表示 */}
+      {usedIngredients && usedIngredients.length > 0 && (
+        <View style={styles.ingredientsContainer}>
+          <Text style={styles.ingredientsTitle}>
+            📦 使える食材:
+          </Text>
+          <Text style={styles.ingredientsList}>
+            {usedIngredients.join(', ')}
+          </Text>
+        </View>
+      )}
+      
       <Text style={styles.title}>
         採用したいレシピを選んでください
       </Text>
@@ -181,6 +235,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     textAlign: 'center',
+  },
+  // Phase 2.1: 段階情報のスタイル
+  stageContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  badge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  mainBadge: {
+    backgroundColor: '#2563eb',
+  },
+  categoryBadge: {
+    backgroundColor: '#4f46e5',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  ingredientsContainer: {
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#fef9c3',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fde047',
+  },
+  ingredientsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  ingredientsList: {
+    fontSize: 14,
+    color: '#6b7280',
   },
 });
 

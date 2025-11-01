@@ -1,6 +1,7 @@
 import { RecipeAdoptionRequest, RecipeAdoptionItem, SelectionRequest, SelectionResponse } from '../types/menu';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const getApiUrl = () => {
   if (Platform.OS === 'web') {
@@ -57,9 +58,141 @@ export async function sendSelection(
   return await response.json();
 }
 
-// レシピ採用API呼び出し（Phase 1では未実装、Phase 2で実装予定）
+// レシピ採用API呼び出し
 export async function adoptRecipes(recipes: RecipeAdoptionItem[]): Promise<any> {
-  // Phase 2で実装
-  throw new Error('adoptRecipes is not implemented yet');
+  if (recipes.length === 0) {
+    return {
+      success: false,
+      message: '採用するレシピが選択されていません',
+      error: 'NO_RECIPES_SELECTED'
+    };
+  }
+
+  const apiUrl = `${getApiUrl()}/recipe/adopt`;
+  
+  try {
+    const response = await authenticatedFetch(apiUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        recipes: recipes
+      } as RecipeAdoptionRequest)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = 'レシピの採用に失敗しました';
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.message || errorMessage;
+      } catch {
+        // JSONパースに失敗した場合はテキストをそのまま使用
+        if (errorText.trim()) {
+          errorMessage = errorText;
+        }
+      }
+      
+      return {
+        success: false,
+        message: errorMessage,
+        error: `HTTP_${response.status}`
+      };
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // 成功時は採用済みレシピをAsyncStorageに保存
+      await saveAdoptedRecipes(recipes);
+      
+      return {
+        success: true,
+        message: result.message || `${recipes.length}つのレシピを採用しました`
+      };
+    } else {
+      return {
+        success: false,
+        message: result.message || 'レシピの採用に失敗しました',
+        error: 'API_ERROR'
+      };
+    }
+  } catch (error) {
+    console.error('レシピ採用エラー:', error);
+    
+    if (error instanceof Error) {
+      return {
+        success: false,
+        message: error.message || 'ネットワークエラーが発生しました',
+        error: 'NETWORK_ERROR'
+      };
+    }
+    
+    return {
+      success: false,
+      message: '予期しないエラーが発生しました',
+      error: 'UNKNOWN_ERROR'
+    };
+  }
+}
+
+// AsyncStorageのキー名
+const ADOPTED_RECIPES_KEY = 'morizo_adopted_recipes';
+
+// 採用済みレシピをAsyncStorageに保存
+export async function saveAdoptedRecipes(recipes: RecipeAdoptionItem[]): Promise<void> {
+  try {
+    const existing = await getAdoptedRecipes();
+    const newRecipes = recipes.map(recipe => recipe.title);
+    
+    // 重複を避けて追加
+    const allRecipes = [...new Set([...existing, ...newRecipes])];
+    
+    await AsyncStorage.setItem(ADOPTED_RECIPES_KEY, JSON.stringify(allRecipes));
+    
+    // デバッグログ: 保存された内容を確認
+    console.log('[DEBUG] AsyncStorageに保存完了:', {
+      newRecipes: newRecipes,
+      existingCount: existing.length,
+      totalCount: allRecipes.length,
+      allRecipes: allRecipes
+    });
+  } catch (error) {
+    console.error('AsyncStorageへの保存に失敗:', error);
+  }
+}
+
+// AsyncStorageから採用済みレシピ一覧を取得
+export async function getAdoptedRecipes(): Promise<string[]> {
+  try {
+    const data = await AsyncStorage.getItem(ADOPTED_RECIPES_KEY);
+    const recipes = data ? JSON.parse(data) : [];
+    
+    // デバッグログ: 読み込んだ内容を確認
+    console.log('[DEBUG] AsyncStorageから読み込み:', {
+      hasData: !!data,
+      count: recipes.length,
+      recipes: recipes
+    });
+    
+    return recipes;
+  } catch (error) {
+    console.error('AsyncStorageからの読み込みに失敗:', error);
+    return [];
+  }
+}
+
+// 指定したレシピが採用済みかチェック
+export async function isRecipeAdopted(recipeTitle: string): Promise<boolean> {
+  const adopted = await getAdoptedRecipes();
+  return adopted.includes(recipeTitle);
+}
+
+// AsyncStorageから採用済みレシピ情報をクリア
+export async function clearAdoptedRecipes(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(ADOPTED_RECIPES_KEY);
+  } catch (error) {
+    console.error('AsyncStorageのクリアに失敗:', error);
+  }
 }
 

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { RecipeCardProps, RecipeCard } from '../../types/menu';
 import ImageHandler from './ImageHandler';
 import UrlHandler from './UrlHandler';
@@ -12,15 +12,52 @@ import UrlHandler from './UrlHandler';
 /**
  * レシピカードコンポーネント
  */
-export function RecipeCardComponent({ recipe, onUrlClick }: RecipeCardProps) {
+export function RecipeCardComponent({ 
+  recipe, 
+  onUrlClick, 
+  isSelected = false, 
+  onSelect, 
+  isAdopted = false 
+}: RecipeCardProps) {
   const { title, urls, emoji } = recipe;
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // 複数URLの場合はプルダウンメニューを表示
   const hasMultipleUrls = urls.length > 1;
 
+  // チェックボックスの変更ハンドラー
+  const handleCheckboxPress = () => {
+    if (onSelect) {
+      onSelect(recipe);
+    }
+  };
+
   return (
-    <View style={[styles.container, isDropdownOpen && { zIndex: 1000 }]}>
+    <View style={[
+      styles.container, 
+      isDropdownOpen && { zIndex: 1000 },
+      isSelected && styles.containerSelected
+    ]}>
+      {/* チェックボックス（左上） */}
+      {onSelect && (
+        <TouchableOpacity
+          style={[
+            styles.checkbox,
+            isSelected && styles.checkboxSelected
+          ]}
+          onPress={handleCheckboxPress}
+        >
+          {isSelected && <Text style={styles.checkmark}>✓</Text>}
+        </TouchableOpacity>
+      )}
+
+      {/* 採用済みバッジ（右上） */}
+      {isAdopted && (
+        <View style={styles.adoptedBadge}>
+          <Text style={styles.adoptedBadgeText}>✓ 採用済み</Text>
+        </View>
+      )}
+
       {/* 画像表示（クリック可能） */}
       <ImageHandler
         urls={urls}
@@ -115,6 +152,11 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     zIndex: 1, // 基本的なzIndex
   },
+  containerSelected: {
+    borderColor: '#3b82f6',
+    borderWidth: 2,
+    backgroundColor: '#dbeafe',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -204,5 +246,44 @@ const styles = StyleSheet.create({
   errorMessage: {
     fontSize: 14,
     color: '#B91C1C',
+  },
+  // Phase 2.2: チェックボックスと採用済みバッジのスタイル
+  checkbox: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#9ca3af',
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  checkboxSelected: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  adoptedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#10b981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    zIndex: 10,
+  },
+  adoptedBadgeText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

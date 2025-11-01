@@ -25,15 +25,19 @@ function SectionTitle({ title }: SectionTitleProps) {
 }
 
 /**
- * レシピグリッドコンポーネント
+ * レシピグリッドコンポーネント（型定義は上に移動）
  */
+
 interface RecipeGridProps {
   recipes: RecipeCard[];
   category: string;
   emoji: string;
+  selectedRecipes?: import('../types/menu').SelectedRecipes;
+  onRecipeSelect?: (recipe: RecipeCard, category: 'main_dish' | 'side_dish' | 'soup', section: 'innovative' | 'traditional') => void;
+  section?: 'innovative' | 'traditional';
 }
 
-function RecipeGrid({ recipes, category, emoji }: RecipeGridProps) {
+function RecipeGrid({ recipes, category, emoji, selectedRecipes, onRecipeSelect, section }: RecipeGridProps) {
   if (recipes.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -43,12 +47,28 @@ function RecipeGrid({ recipes, category, emoji }: RecipeGridProps) {
     );
   }
 
+  // カテゴリマッピング
+  const categoryMap: Record<string, 'main_dish' | 'side_dish' | 'soup'> = {
+    main: 'main_dish',
+    side: 'side_dish',
+    soup: 'soup'
+  };
+
+  const mappedCategory = categoryMap[category] || 'main_dish';
+  const isSelected = (recipe: RecipeCard) => {
+    if (!selectedRecipes) return false;
+    const selected = selectedRecipes[mappedCategory];
+    return selected?.title === recipe.title;
+  };
+
   return (
     <>
       {recipes.map((recipe, index) => (
         <View key={`${category}-${index}`} style={styles.gridItem}>
           <RecipeCardComponent
             recipe={recipe}
+            isSelected={isSelected(recipe)}
+            onSelect={onRecipeSelect && section ? (r) => onRecipeSelect(r, mappedCategory, section) : undefined}
           />
         </View>
       ))}
@@ -93,7 +113,7 @@ function getTotalRecipeCount(recipes: { main: RecipeCard[]; side: RecipeCard[]; 
 /**
  * メニュービューアーのメインコンポーネント
  */
-export function MenuViewer({ response, result, style }: MenuViewerProps) {
+export function MenuViewer({ response, result, style, selectedRecipes, onRecipeSelect }: MenuViewerProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -161,9 +181,30 @@ export function MenuViewer({ response, result, style }: MenuViewerProps) {
         <View style={styles.section}>
           <SectionTitle title={innovative} />
           <View style={styles.grid}>
-            <RecipeGrid recipes={innovativeRecipes.main} category="main" emoji="🍖" />
-            <RecipeGrid recipes={innovativeRecipes.side} category="side" emoji="🥗" />
-            <RecipeGrid recipes={innovativeRecipes.soup} category="soup" emoji="🍵" />
+            <RecipeGrid 
+              recipes={innovativeRecipes.main} 
+              category="main" 
+              emoji="🍖" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="innovative"
+            />
+            <RecipeGrid 
+              recipes={innovativeRecipes.side} 
+              category="side" 
+              emoji="🥗" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="innovative"
+            />
+            <RecipeGrid 
+              recipes={innovativeRecipes.soup} 
+              category="soup" 
+              emoji="🍵" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="innovative"
+            />
           </View>
         </View>
       )}
@@ -173,9 +214,30 @@ export function MenuViewer({ response, result, style }: MenuViewerProps) {
         <View style={styles.section}>
           <SectionTitle title={traditional} />
           <View style={styles.grid}>
-            <RecipeGrid recipes={traditionalRecipes.main} category="main" emoji="🍖" />
-            <RecipeGrid recipes={traditionalRecipes.side} category="side" emoji="🥗" />
-            <RecipeGrid recipes={traditionalRecipes.soup} category="soup" emoji="🍵" />
+            <RecipeGrid 
+              recipes={traditionalRecipes.main} 
+              category="main" 
+              emoji="🍖" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="traditional"
+            />
+            <RecipeGrid 
+              recipes={traditionalRecipes.side} 
+              category="side" 
+              emoji="🥗" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="traditional"
+            />
+            <RecipeGrid 
+              recipes={traditionalRecipes.soup} 
+              category="soup" 
+              emoji="🍵" 
+              selectedRecipes={selectedRecipes}
+              onRecipeSelect={onRecipeSelect}
+              section="traditional"
+            />
           </View>
         </View>
       )}

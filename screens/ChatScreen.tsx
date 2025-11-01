@@ -509,13 +509,98 @@ export default function ChatScreen() {
   const handleSelection = (selection: number, selectionResult?: any) => {
     setAwaitingSelection(false);
     
-    // 選択結果メッセージを追加
+    // 選択結果メッセージを追加（ユニークID生成）
+    const userMessageId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setChatMessages(prev => [...prev, {
-      id: Date.now().toString(),
+      id: userMessageId,
       type: 'user',
       content: `${selection}番を選択しました`,
       timestamp: new Date(),
     }]);
+  };
+
+  // Phase 2.1修正: 次の段階をリクエストする関数（Web版に合わせて実装）
+  const requestNextStage = async () => {
+    // 最後のメッセージからSSEセッションIDを取得
+    const lastMessage = chatMessages[chatMessages.length - 1];
+    const currentSseSessionId = lastMessage.sseSessionId || 'unknown';
+    
+    if (currentSseSessionId === 'unknown') {
+      console.error('[DEBUG] No SSE session ID found for next stage request');
+      Alert.alert('エラー', 'セッション情報が見つかりませんでした');
+      return;
+    }
+
+    console.log('[DEBUG] Next stage requested, SSE session ID:', currentSseSessionId);
+    
+    // ユニークID生成（重複を防ぐ）
+    const streamingMessageId = `streaming-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 新しいstreamingメッセージを追加
+    const streamingMessage: ChatMessage = {
+      id: streamingMessageId,
+      type: 'streaming',
+      content: '次段階の提案を取得中...',
+      timestamp: new Date(),
+      sseSessionId: currentSseSessionId,
+    };
+    setChatMessages(prev => [...prev, streamingMessage]);
+    
+    // スクロールを最下部に移動
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    
+    try {
+      const apiUrl = `${getApiUrl()}/chat`;
+      
+      // 認証トークンを取得
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      
+      if (!currentSession?.access_token) {
+        throw new Error('認証トークンが取得できません');
+      }
+      
+      // スペース1つのメッセージで/api/chatを呼び出す（バックエンドが自動的に次の提案を開始）
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentSession.access_token}`,
+        },
+        body: JSON.stringify({
+          message: ' ', // スペース1つ（バックエンドがセッションから次の提案を読み取る）
+          sse_session_id: currentSseSessionId,
+          confirm: false
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`チャットAPI エラー: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[DEBUG] Next stage request sent successfully');
+      
+      // SSEのStreamingProgressが処理するため、ここでは何もしない
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '不明なエラー';
+      console.error('[DEBUG] Next stage request failed:', errorMessage);
+      
+      // エラー時はストリーミング進捗表示をエラーメッセージに置き換え
+      setChatMessages(prev => prev.map((msg) => 
+        msg.id === streamingMessageId
+          ? { 
+              id: msg.id,
+              type: 'ai', 
+              content: `エラー: ${errorMessage}`,
+              timestamp: msg.timestamp
+            }
+          : msg
+      ));
+      
+      showErrorAlert(`次段階の提案の取得に失敗しました: ${errorMessage}`);
+    }
   };
 
   // ログアウト処理
@@ -608,6 +693,10 @@ export default function ChatScreen() {
                             taskId={message.taskId}
                             sseSessionId={message.sseSessionId || 'unknown'}
                             isLoading={isTextChatLoading}
+                            currentStage={message.currentStage}
+                            usedIngredients={message.usedIngredients}
+                            menuCategory={message.menuCategory}
+                            onNextStageRequested={requestNextStage}
                           />
                         </View>
                       )}
