@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Modal, TextInput } from 'react-native';
-import { getInventoryList, InventoryItem } from '../api/inventory-api';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Modal, TextInput, Alert } from 'react-native';
+import { getInventoryList, deleteInventoryItem, InventoryItem } from '../api/inventory-api';
 import { Picker } from '@react-native-picker/picker';
+import InventoryEditModal from './InventoryEditModal';
 
 interface InventoryPanelProps {
   isOpen: boolean;
@@ -15,6 +16,9 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<string>('desc');
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -37,7 +41,7 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+    return `${date.getMonth() + 1}/${date.getDate()}`;
   };
 
   // フィルター適用
@@ -52,6 +56,56 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
   const storageLocations = Array.from(new Set(
     inventory.map(item => item.storage_location).filter(Boolean) as string[]
   ));
+
+  const handleAddNew = () => {
+    setEditingItem(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    setIsEditModalOpen(true);
+  };
+
+  const handleDelete = async (itemId: string, itemName: string) => {
+    Alert.alert(
+      '削除確認',
+      `「${itemName}」を削除しますか？`,
+      [
+        {
+          text: 'キャンセル',
+          style: 'cancel',
+        },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(itemId);
+            try {
+              await deleteInventoryItem(itemId);
+              await loadInventory(); // 一覧を再読み込み
+            } catch (error) {
+              console.error('Inventory delete failed:', error);
+              const errorMessage = error instanceof Error ? error.message : '削除に失敗しました';
+              Alert.alert('エラー', errorMessage);
+            } finally {
+              setIsDeleting(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditModalClose = () => {
+    setIsEditModalOpen(false);
+    setEditingItem(null);
+  };
+
+  const handleEditModalSave = async () => {
+    await loadInventory(); // 一覧を再読み込み
+    handleEditModalClose();
+  };
 
   return (
     <Modal
@@ -151,6 +205,7 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
                 <Text style={[styles.headerCell, styles.headerCellUnit]}>単位</Text>
                 <Text style={[styles.headerCell, styles.headerCellLocation]}>場所</Text>
                 <Text style={[styles.headerCell, styles.headerCellDate]}>登録日</Text>
+                <Text style={[styles.headerCell, styles.headerCellActions]}>操作</Text>
               </View>
               
               {/* 在庫アイテム */}
@@ -165,11 +220,49 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
                   <Text style={[styles.cell, styles.cellDate]}>
                     {formatDate(item.created_at)}
                   </Text>
+                  <View style={styles.cellActions}>
+                    <TouchableOpacity
+                      onPress={() => handleEdit(item)}
+                      style={styles.editButton}
+                    >
+                      <Text style={styles.editButtonText}>編集</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDelete(item.id, item.item_name)}
+                      disabled={isDeleting === item.id}
+                      style={[
+                        styles.deleteButton,
+                        isDeleting === item.id && styles.deleteButtonDisabled
+                      ]}
+                    >
+                      <Text style={styles.deleteButtonText}>
+                        {isDeleting === item.id ? '削除中...' : '削除'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ))}
             </View>
           )}
+          
+          {/* 新規追加ボタン */}
+          <View style={styles.addButtonContainer}>
+            <TouchableOpacity
+              onPress={handleAddNew}
+              style={styles.addButton}
+            >
+              <Text style={styles.addButtonText}>+ 新規追加</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
+        
+        {/* 編集モーダル */}
+        <InventoryEditModal
+          isOpen={isEditModalOpen}
+          onClose={handleEditModalClose}
+          item={editingItem}
+          onSave={handleEditModalSave}
+        />
       </View>
     </Modal>
   );
@@ -265,7 +358,7 @@ const styles = StyleSheet.create({
     color: '#4b5563',
   },
   headerCellName: {
-    flex: 2,
+    flex: 1.5,
   },
   headerCellQuantity: {
     flex: 1,
@@ -283,19 +376,24 @@ const styles = StyleSheet.create({
     flex: 1.5,
     textAlign: 'left',
   },
+  headerCellActions: {
+    width: 100,
+    textAlign: 'center',
+  },
   inventoryRow: {
     flexDirection: 'row',
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    alignItems: 'center',
   },
   cell: {
     fontSize: 14,
     color: '#1f2937',
   },
   cellName: {
-    flex: 2,
+    flex: 1.5,
   },
   cellQuantity: {
     flex: 1,
@@ -313,6 +411,55 @@ const styles = StyleSheet.create({
   cellDate: {
     flex: 1.5,
     color: '#6b7280',
+  },
+  cellActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 8,
+    width: 100,
+    justifyContent: 'center',
+  },
+  editButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  editButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: '#9ca3af',
+  },
+  deleteButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addButtonContainer: {
+    padding: 16,
+    paddingTop: 24,
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  addButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

@@ -167,6 +167,44 @@ npx expo start --web
 npx expo start --tunnel
 ```
 
+### Phase 2: 在庫一覧表示機能 ✅ **完了（2025年1月27日）**
+
+#### **実装完了機能**
+- ✅ **在庫一覧表示**: フィルター・ソート機能付き
+- ✅ **ドロワー型UI**: 履歴パネルと同様のUIパターン
+- ✅ **フィルター機能**: 保管場所、検索（アイテム名）
+- ✅ **ソート機能**: 登録日、アイテム名、数量、保管場所、消費期限（昇順/降順）
+- ✅ **API連携**: Morizo Web APIとの認証付き通信
+- ✅ **エラーハンドリング**: 適切なエラー処理・表示
+
+#### **実装ファイル**
+- `components/InventoryPanel.tsx` - 在庫一覧表示コンポーネント
+- `api/inventory-api.ts` - 在庫一覧取得API関数
+- `components/ChatInput.tsx` - 在庫ボタンを追加
+- `screens/ChatScreen.tsx` - InventoryPanelコンポーネントを追加
+- `hooks/useModalManagement.ts` - 在庫パネル管理を追加
+
+### Phase 3: 在庫CRUD操作機能 ✅ **完了（2025年1月27日）**
+
+#### **実装完了機能**
+- ✅ **在庫追加**: モーダル型UIで新規在庫を追加
+- ✅ **在庫編集**: モーダル型UIで在庫情報を編集
+- ✅ **在庫削除**: 確認ダイアログ付きで在庫を削除
+- ✅ **バリデーション**: 必須項目チェック、数量の正の値チェック
+- ✅ **エラーハンドリング**: 適切なエラー処理・表示
+- ✅ **UI改善**: 登録日表示を月/日形式に最適化
+
+#### **実装ファイル**
+- `components/InventoryEditModal.tsx` - 在庫追加・編集モーダル
+- `api/inventory-api.ts` - CRUD操作API関数（add, update, delete）
+- `components/InventoryPanel.tsx` - 編集・削除ボタン、新規追加ボタンを追加
+
+#### **APIエンドポイント**
+- **在庫一覧取得**: `http://192.168.1.12:3000/api/inventory/list`
+- **在庫追加**: `http://192.168.1.12:3000/api/inventory/add`
+- **在庫更新**: `http://192.168.1.12:3000/api/inventory/update/:id`
+- **在庫削除**: `http://192.168.1.12:3000/api/inventory/delete/:id`
+
 #### **音声チャットの技術仕様**
 - **録音品質**: `Audio.RecordingOptionsPresets.HIGH_QUALITY`
 - **音声形式**: M4A形式
