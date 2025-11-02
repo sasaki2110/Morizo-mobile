@@ -14,7 +14,7 @@ interface SelectionOptionsProps {
   usedIngredients?: string[];
   menuCategory?: 'japanese' | 'western' | 'chinese';
   // Phase 2.1修正: 次の段階リクエスト用のコールバック
-  onNextStageRequested?: () => void;
+  onNextStageRequested?: (sseSessionId?: string) => void;
   // Phase 2.3: レシピ一覧表示用のコールバック
   onViewList?: (candidates: RecipeCandidate[]) => void;
   // Phase 2.4: 他の提案を見る機能
@@ -41,6 +41,11 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
+  const [showStageConfirmation, setShowStageConfirmation] = useState<boolean>(false);
+  const [confirmationData, setConfirmationData] = useState<{
+    message: string;
+    nextStageName: string;
+  } | null>(null);
 
   // Phase 2.3: レシピ一覧を見るハンドラー
   const handleViewList = () => {
@@ -124,10 +129,24 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
       if (result.success) {
         onSelect(selectedIndex + 1, result);
         
+        // 確認ステップが必要な場合（requires_stage_confirmationフラグがtrue）
+        if (result.requires_stage_confirmation && result.confirmation_message && result.next_stage_name) {
+          console.log('[DEBUG] requires_stage_confirmation flag detected, showing confirmation dialog');
+          setConfirmationData({
+            message: result.confirmation_message,
+            nextStageName: result.next_stage_name
+          });
+          setShowStageConfirmation(true);
+          // 確認待ちのため、ここではonNextStageRequestedを呼ばない
+          return;
+        }
+        
+        // 確認ステップが不要な場合（旧方式のフォールバック）
         // Phase 2.1修正: 次の段階の提案が要求されている場合はフラグをチェック
         if (result.requires_next_stage && onNextStageRequested) {
           console.log('[DEBUG] requires_next_stage flag detected, calling onNextStageRequested');
-          onNextStageRequested();
+          console.log('[DEBUG] Passing SSE session ID to onNextStageRequested:', sseSessionId);
+          onNextStageRequested(sseSessionId);
         }
       } else {
         throw new Error(result.error || 'Selection failed');
@@ -224,7 +243,7 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
           style={styles.viewListButton}
         >
           <Text style={styles.viewListButtonText}>
-            📋 レシピ一覧を見る
+            📋 レシピを見る
           </Text>
         </TouchableOpacity>
       )}
@@ -264,6 +283,43 @@ const SelectionOptions: React.FC<SelectionOptionsProps> = ({
           {isConfirming ? '確定中...' : '確定'}
         </Text>
       </TouchableOpacity>
+      
+      {/* 段階遷移確認ダイアログ */}
+      {showStageConfirmation && confirmationData && (
+        <View style={styles.confirmationContainer}>
+          <Text style={styles.confirmationMessage}>
+            {confirmationData.message}
+          </Text>
+          <View style={styles.confirmationButtonContainer}>
+            <TouchableOpacity
+              onPress={() => {
+                // 進むボタン: 次の段階を開始
+                setShowStageConfirmation(false);
+                setConfirmationData(null);
+                if (onNextStageRequested) {
+                  console.log(`[DEBUG] User confirmed, proceeding to ${confirmationData.nextStageName} stage`);
+                  console.log('[DEBUG] Passing SSE session ID to onNextStageRequested:', sseSessionId);
+                  onNextStageRequested(sseSessionId);
+                }
+              }}
+              style={styles.confirmationProceedButton}
+            >
+              <Text style={styles.confirmationButtonText}>進む</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                // キャンセルボタン: 確認を閉じる（現在の段階に留まる）
+                setShowStageConfirmation(false);
+                setConfirmationData(null);
+                console.log('[DEBUG] User cancelled stage transition');
+              }}
+              style={[styles.confirmationCancelButton, { marginLeft: 8 }]}
+            >
+              <Text style={styles.confirmationButtonText}>キャンセル</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -439,6 +495,49 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 14,
     color: '#6b7280',
+  },
+  // UPDATE07: 段階遷移確認ダイアログのスタイル
+  confirmationContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  confirmationMessage: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  confirmationButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  confirmationProceedButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 100,
+  },
+  confirmationCancelButton: {
+    backgroundColor: '#9ca3af',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 100,
+  },
+  confirmationButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

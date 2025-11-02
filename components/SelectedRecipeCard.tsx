@@ -7,6 +7,7 @@ interface SelectedRecipeCardProps {
   sub?: RecipeCandidate;
   soup?: RecipeCandidate;
   onSave?: () => void;
+  onViewList?: (candidates: RecipeCandidate[]) => void;
   isSaving?: boolean;
   savedMessage?: string;
 }
@@ -16,6 +17,7 @@ const SelectedRecipeCard: React.FC<SelectedRecipeCardProps> = ({
   sub,
   soup,
   onSave,
+  onViewList,
   isSaving = false,
   savedMessage
 }) => {
@@ -104,17 +106,35 @@ const SelectedRecipeCard: React.FC<SelectedRecipeCardProps> = ({
             )}
           </View>
           
-          {onSave && (
-            <TouchableOpacity
-              onPress={onSave}
-              disabled={isSaving}
-              style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
-            >
-              <Text style={styles.saveButtonText}>
-                {isSaving ? '保存中...' : '献立を保存'}
-              </Text>
-            </TouchableOpacity>
-          )}
+          <View style={styles.buttonContainer}>
+            {onSave && (
+              <TouchableOpacity
+                onPress={onSave}
+                disabled={isSaving}
+                style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+              >
+                <Text style={styles.saveButtonText}>
+                  {isSaving ? '保存中...' : '献立を保存'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {onViewList && (main || sub || soup) && (
+              <TouchableOpacity
+                onPress={() => {
+                  const recipes = [];
+                  if (main) recipes.push(main);
+                  if (sub) recipes.push(sub);
+                  if (soup) recipes.push(soup);
+                  onViewList(recipes);
+                }}
+                style={[styles.viewListButton, onSave && { marginLeft: 8 }]}
+              >
+                <Text style={styles.viewListButtonText}>
+                  📋 レシピを見る
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           {savedMessage && (
             <View style={styles.messageContainer}>
@@ -197,17 +217,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
   saveButton: {
     backgroundColor: '#22c55e',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     alignItems: 'center',
+    flex: 1,
+    minWidth: 120,
   },
   saveButtonDisabled: {
     backgroundColor: '#9ca3af',
   },
   saveButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  viewListButton: {
+    backgroundColor: '#4f46e5',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 120,
+  },
+  viewListButtonText: {
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',

@@ -24,7 +24,7 @@ interface ChatMessageListProps {
   onSelect: (selection: number, selectionResult?: any) => void;
   onViewList: (candidates: RecipeCandidate[], currentStage?: 'main' | 'sub' | 'soup') => void;
   onRequestMore: (sseSessionId: string) => void;
-  onNextStageRequested: () => void;
+  onNextStageRequested: (sseSessionId?: string) => void;
   onOpenRecipeViewer: (response: string, result?: unknown) => void;
   createOnCompleteHandler: (message: ChatMessage, messageIndex: number) => (result: unknown) => void;
   createOnErrorHandler: (message: ChatMessage, messageIndex: number) => (error: string) => void;
@@ -158,6 +158,7 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
             sub={selectedRecipes.sub}
             soup={selectedRecipes.soup}
             onSave={onSaveMenu}
+            onViewList={(candidates) => onViewList(candidates)}
             isSaving={isSavingMenu}
             savedMessage={savedMessage}
           />

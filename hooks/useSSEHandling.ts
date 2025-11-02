@@ -39,18 +39,27 @@ export function useSSEHandling(
   };
 
   // Phase 3C-3: 次の段階の提案を要求
-  const handleNextStageRequested = async () => {
-    // 最後のメッセージからSSEセッションIDを取得
-    const lastMessage = chatMessages[chatMessages.length - 1];
-    const currentSseSessionId = lastMessage.sseSessionId || 'unknown';
+  const handleNextStageRequested = async (sseSessionId?: string) => {
+    // SSEセッションIDの取得: 引数で渡された場合はそれを使用、 otherwise 最後のメッセージから取得
+    let currentSseSessionId: string;
     
-    if (currentSseSessionId === 'unknown') {
-      console.error('[DEBUG] No SSE session ID found for next stage request');
-      Alert.alert('エラー', 'セッション情報が見つかりませんでした');
-      return;
+    if (sseSessionId) {
+      // 引数で渡されたSSEセッションIDを使用
+      currentSseSessionId = sseSessionId;
+      console.log('[DEBUG] Next stage requested with provided SSE session ID:', currentSseSessionId);
+    } else {
+      // 最後のメッセージからSSEセッションIDを取得（フォールバック）
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      currentSseSessionId = lastMessage.sseSessionId || 'unknown';
+      
+      if (currentSseSessionId === 'unknown') {
+        console.error('[DEBUG] No SSE session ID found for next stage request');
+        Alert.alert('エラー', 'セッション情報が見つかりませんでした');
+        return;
+      }
+      
+      console.log('[DEBUG] Next stage requested, SSE session ID from last message:', currentSseSessionId);
     }
-
-    console.log('[DEBUG] Next stage requested, SSE session ID:', currentSseSessionId);
     
     // ユニークID生成（重複を防ぐ）
     const streamingMessageId = `streaming-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
