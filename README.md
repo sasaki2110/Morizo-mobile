@@ -174,6 +174,88 @@ npx expo start --tunnel
 - **リトライ**: 最大3回自動リトライ
 - **音声認識**: OpenAI Whisper API経由
 
+### Phase 4.3: Googleログイン ✅ **完了（2025年1月27日）**
+
+#### **実装完了機能**
+- ✅ **Google OAuth認証**: expo-auth-sessionを使用したモバイル対応実装
+- ✅ **Deep Linking設定**: app.jsonにscheme設定を追加
+- ✅ **プラットフォーム対応**: Web版とモバイル版で異なるOAuthフローを実装
+- ✅ **セッション管理**: OAuth認証後のセッション自動設定
+- ✅ **エラーハンドリング**: 適切なエラー処理・表示
+
+#### **実装ファイル**
+- `contexts/AuthContext.tsx` - Google認証関数（モバイル対応）
+- `screens/LoginScreen.tsx` - GoogleログインボタンUI
+- `app.json` - Deep linking設定（scheme: morizo-mobile）
+- `package.json` - expo-auth-session, expo-web-browserパッケージ追加
+
+#### **技術仕様**
+- **OAuthフロー**: expo-auth-session + expo-web-browser
+- **リダイレクトURL**: `morizo-mobile://auth/callback`
+- **セッション管理**: Supabase自動セッション管理
+- **プラットフォーム**: Web版は通常フロー、モバイル版はカスタムフロー
+
+#### **Supabase設定要件**
+
+**重要**: リダイレクトURLが`localhost:3000`になっている場合、以下の設定を確認してください。
+
+1. **Supabase Dashboard** → **Authentication** → **URL Configuration**
+   - **Site URL**: Web版のURL（例: `https://your-app.vercel.app`）を設定
+   - **Redirect URLs**: 以下のURLを**必ず追加**してください：
+     ```
+     morizo-mobile://auth/callback
+     exp://*.exp.direct
+     exp://*.exp.direct/**
+     ```
+   - **注意**: 
+     - `localhost:3000`がRedirect URLsに含まれている場合、**削除**してください
+     - **Expo Goを使用している場合**、プロキシURL（`exp://*.exp.direct`）を追加する必要があります
+     - ワイルドカード（`*`）を使用して、すべてのExpo GoプロキシURLに対応できます
+     - または、モバイル用URLを**最初に**配置してください（優先順位の問題）
+     - 設定を保存後、**数分待つ**必要があります（反映に時間がかかります）
+
+2. **Google OAuth設定**: Web版と同じGoogle OAuth設定を使用
+   - **注意**: Google Cloud Consoleで「Webアプリケーション」タイプのOAuth設定でも動作します
+   - Android専用の設定は不要（ただし、将来的に追加しても問題ありません）
+
+#### **トラブルシューティング**
+
+**問題**: リダイレクト先が`localhost:3000`になる
+
+**原因**: 
+- Supabase DashboardのRedirect URLs設定が正しく反映されていない
+- 生成されたリダイレクトURLがSupabaseに認識されていない
+
+**デバッグ方法**:
+1. ターミナルログで以下を確認：
+   - `OAuthリダイレクトURL生成` - 生成されたURL（`morizo-mobile://auth/callback`であるべき）
+   - `OAuth URL生成成功` - Supabaseが生成したOAuth URLに`redirect_to`パラメータが含まれているか確認
+   - `matches: true`になっているか確認
+
+2. **Supabase Dashboardでの確認**:
+   - **Authentication** → **URL Configuration** → **Redirect URLs**
+   - `morizo-mobile://auth/callback`が**確実に**追加されているか確認
+   - `localhost:3000`が含まれている場合は削除
+
+3. **解決策**:
+   - Supabase Dashboardで設定を保存
+   - **5-10分待つ**（設定反映に時間がかかる場合があります）
+   - アプリを**完全に再起動**して再度試す
+   - それでも解決しない場合は、Supabaseのサポートに問い合わせ
+
+#### **使用方法**
+```bash
+# パッケージをインストール
+npm install
+
+# 開発サーバーを起動
+npx expo start --tunnel
+
+# ログイン画面で「Googleでログイン」ボタンをタップ
+# ブラウザが開き、Google認証画面が表示される
+# 認証完了後、自動的にアプリに戻りログイン完了
+```
+
 ## 既知の問題
 
 ### iOS実機でのローカルLAN接続問題
