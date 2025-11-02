@@ -9,6 +9,7 @@ interface ChatInputProps {
   awaitingSelection: boolean;
   isVoiceChatLoading?: boolean;
   onOpenHistory: () => void;
+  onOpenInventory: () => void;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -19,17 +20,26 @@ const ChatInput: React.FC<ChatInputProps> = ({
   awaitingSelection,
   isVoiceChatLoading = false,
   onOpenHistory,
+  onOpenInventory,
 }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Morizo AI テキストチャット</Text>
-        <TouchableOpacity
-          onPress={onOpenHistory}
-          style={styles.historyButton}
-        >
-          <Text style={styles.historyButtonText}>📅 履歴</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            onPress={onOpenHistory}
+            style={styles.historyButton}
+          >
+            <Text style={styles.historyButtonText}>📅 履歴</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onOpenInventory}
+            style={styles.inventoryButton}
+          >
+            <Text style={styles.inventoryButtonText}>📦 在庫</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       <View style={styles.inputRow}>
@@ -91,13 +101,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  buttonRow: {
+    flexDirection: 'row',
+  },
   historyButton: {
     backgroundColor: '#4b5563',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+    marginRight: 8,
   },
   historyButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  inventoryButton: {
+    backgroundColor: '#4b5563',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  inventoryButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',

@@ -26,6 +26,7 @@ import { logComponent, LogCategory } from '../lib/logging';
 import RecipeViewerScreen from './RecipeViewerScreen';
 import RecipeListModal from '../components/RecipeListModal';
 import HistoryPanel from '../components/HistoryPanel';
+import InventoryPanel from '../components/InventoryPanel';
 import UserProfileModal from '../components/UserProfileModal';
 import ChatInput from '../components/ChatInput';
 import ChatMessageList from '../components/ChatMessageList';
@@ -429,6 +430,7 @@ export default function ChatScreen() {
           awaitingSelection={awaitingSelection}
           isVoiceChatLoading={isVoiceChatLoading}
           onOpenHistory={modalManagement.openHistoryPanel}
+          onOpenInventory={modalManagement.openInventoryPanel}
         />
 
         {/* 音声チャット欄 */}
@@ -481,6 +483,12 @@ export default function ChatScreen() {
       <HistoryPanel
         isOpen={modalManagement.isHistoryPanelOpen}
         onClose={modalManagement.closeHistoryPanel}
+      />
+
+      {/* Phase 2: 在庫パネル */}
+      <InventoryPanel
+        isOpen={modalManagement.isInventoryPanelOpen}
+        onClose={modalManagement.closeInventoryPanel}
       />
 
       {/* UI改善: ユーザープロフィールモーダル */}

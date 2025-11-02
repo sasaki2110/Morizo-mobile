@@ -14,6 +14,9 @@ export function useModalManagement() {
   // Phase 3.2: 履歴パネルの状態管理
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
   
+  // Phase 2: 在庫パネルの状態管理
+  const [isInventoryPanelOpen, setIsInventoryPanelOpen] = useState(false);
+  
   // レシピビューアー画面（モバイル版特有）
   const [showRecipeViewer, setShowRecipeViewer] = useState(false);
   const [recipeViewerData, setRecipeViewerData] = useState<{ response: string; result?: unknown } | null>(null);
@@ -51,6 +54,14 @@ export function useModalManagement() {
     setIsHistoryPanelOpen(false);
   };
 
+  const openInventoryPanel = () => {
+    setIsInventoryPanelOpen(true);
+  };
+
+  const closeInventoryPanel = () => {
+    setIsInventoryPanelOpen(false);
+  };
+
   return {
     // レシピビューアー
     showRecipeViewer,
@@ -67,6 +78,10 @@ export function useModalManagement() {
     isHistoryPanelOpen,
     openHistoryPanel,
     closeHistoryPanel,
+    // 在庫パネル
+    isInventoryPanelOpen,
+    openInventoryPanel,
+    closeInventoryPanel,
   };
 }
 
