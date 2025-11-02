@@ -7,9 +7,10 @@ interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenHistory: () => void;
+  onOpenInventory: () => void;
 }
 
-const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose, onOpenHistory }) => {
+const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose, onOpenHistory, onOpenInventory }) => {
   const { user, session, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -81,7 +82,18 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose, on
               onClose(); // プロフィールモーダルを閉じて履歴モーダルを開く
             }}
           >
-            <Text style={styles.historyButtonText}>📅 献立履歴</Text>
+            <Text style={styles.historyButtonText}>📅 履歴</Text>
+          </TouchableOpacity>
+
+          {/* 在庫ボタン */}
+          <TouchableOpacity
+            style={styles.inventoryButton}
+            onPress={() => {
+              onOpenInventory();
+              onClose(); // プロフィールモーダルを閉じて在庫モーダルを開く
+            }}
+          >
+            <Text style={styles.inventoryButtonText}>📦 在庫</Text>
           </TouchableOpacity>
 
           {/* トークンコピーボタン */}
@@ -211,7 +223,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   historyButton: {
-    backgroundColor: '#4b5563',
+    backgroundColor: '#d1d5db',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -220,7 +232,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   historyButtonText: {
-    color: '#ffffff',
+    color: '#374151',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  inventoryButton: {
+    backgroundColor: '#d1d5db',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  inventoryButtonText: {
+    color: '#374151',
     fontSize: 16,
     fontWeight: '600',
   },

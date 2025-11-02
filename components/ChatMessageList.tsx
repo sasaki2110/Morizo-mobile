@@ -183,9 +183,11 @@ const ChatMessageList: React.FC<ChatMessageListProps> = ({
 const styles = StyleSheet.create({
   chatHistoryContainer: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: '#fff',
     marginHorizontal: 15,
-    marginVertical: 10,
+    marginTop: 10,
+    marginBottom: 5,
     borderRadius: 10,
     padding: 15,
   },
@@ -197,6 +199,7 @@ const styles = StyleSheet.create({
   },
   chatScrollView: {
     flex: 1,
+    minHeight: 0,
   },
   chatScrollContent: {
     paddingBottom: 10,

@@ -59,6 +59,7 @@ export default function ChatScreen() {
     });
   }, []);
 
+
   // 未認証の場合は何もしない
   if (!isAuthenticated) {
     logComponent('ChatScreen', 'auth_not_authenticated');
@@ -382,8 +383,8 @@ export default function ChatScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
         style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* ユーザープロフィールセクション（アバターアイコンのみ） */}
         <View style={styles.profileSection}>
@@ -429,8 +430,6 @@ export default function ChatScreen() {
           isTextChatLoading={isTextChatLoading}
           awaitingSelection={awaitingSelection}
           isVoiceChatLoading={isVoiceChatLoading}
-          onOpenHistory={modalManagement.openHistoryPanel}
-          onOpenInventory={modalManagement.openInventoryPanel}
         />
 
         {/* 音声チャット欄 */}
@@ -499,6 +498,10 @@ export default function ChatScreen() {
           setIsProfileModalOpen(false);
           modalManagement.openHistoryPanel();
         }}
+        onOpenInventory={() => {
+          setIsProfileModalOpen(false);
+          modalManagement.openInventoryPanel();
+        }}
       />
     </SafeAreaView>
   );
@@ -541,7 +544,7 @@ const styles = StyleSheet.create({
   voiceSection: {
     backgroundColor: '#fff',
     marginHorizontal: 15,
-    marginBottom: 15,
+    marginBottom: Platform.OS === 'ios' ? 0 : 10,
     borderRadius: 10,
     padding: 15,
     alignItems: 'center',
