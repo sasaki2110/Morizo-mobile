@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicator, ScrollView, FlatList, Image, TextInput, Switch } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { analyzeReceiptOCR, OCRItem, OCRResult, addInventoryItem } from '../api/inventory-api';
+import { OCRItem, addInventoryItem } from '../api/inventory-api';
 import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
 import { useImagePicker } from '../hooks/useImagePicker';
+import { useOCRAnalysis } from '../hooks/useOCRAnalysis';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -17,9 +18,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   onUploadComplete,
 }) => {
   const { imageUri, selectImage, clearImage } = useImagePicker();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
-  const [editableItems, setEditableItems] = useState<OCRItem[]>([]);
+  const { ocrResult, isAnalyzing, analyzeImage, editableItems, setEditableItems, clearResult } = useOCRAnalysis();
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [isRegistering, setIsRegistering] = useState(false);
   const previousImageUriRef = useRef<string | null>(null);
@@ -32,41 +31,25 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   useEffect(() => {
     // 新しい画像が選択された場合（前回がnullで今回がnull以外、または前回がnull以外で今回もnull以外かつ値が変わった場合）
     if (imageUri !== null && (previousImageUriRef.current === null || previousImageUriRef.current !== imageUri)) {
-      setOcrResult(null);
-      setEditableItems([]);
+      clearResult();
       setSelectedItems(new Set());
     }
     previousImageUriRef.current = imageUri;
-  }, [imageUri]);
+  }, [imageUri, clearResult]);
+
+  // OCR解析が完了してアイテムが抽出されたとき、すべてのアイテムを選択状態にする
+  useEffect(() => {
+    if (editableItems.length > 0) {
+      setSelectedItems(new Set(editableItems.map((_, idx) => idx)));
+    }
+  }, [editableItems]);
 
   const handleAnalyze = async () => {
     if (!imageUri) {
       Alert.alert('エラー', '画像ファイルを選択してください');
       return;
     }
-
-    setIsAnalyzing(true);
-    setOcrResult(null);
-
-    try {
-      const result = await analyzeReceiptOCR(imageUri);
-      setOcrResult(result);
-      
-      // 編集可能なアイテムリストを作成
-      if (result.items && result.items.length > 0) {
-        setEditableItems([...result.items]);
-        // すべてのアイテムを選択状態にする
-        setSelectedItems(new Set(result.items.map((_, idx) => idx)));
-      } else {
-        Alert.alert('情報', 'OCR解析でアイテムが抽出されませんでした');
-      }
-    } catch (error) {
-      console.error('OCR analysis failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'OCR解析に失敗しました';
-      Alert.alert('エラー', errorMessage);
-    } finally {
-      setIsAnalyzing(false);
-    }
+    await analyzeImage(imageUri);
   };
 
   const handleItemEdit = (index: number, field: keyof OCRItem, value: string | number | null) => {
@@ -146,8 +129,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
 
   const handleClose = () => {
     clearImage();
-    setOcrResult(null);
-    setEditableItems([]);
+    clearResult();
     setSelectedItems(new Set());
     onClose();
   };

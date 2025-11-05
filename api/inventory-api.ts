@@ -315,6 +315,16 @@ export async function analyzeReceiptOCR(imageUri: string): Promise<OCRResult> {
           console.error('❌ [OCR] Error response (text):', errorText);
           errorMessage = errorText || errorMessage;
         }
+        
+        // 400エラー（Bad Request）の場合は、ユーザーフレンドリーなメッセージに変換
+        if (response.status === 400) {
+          // 技術的なエラーメッセージをユーザー向けに変換
+          if (errorMessage.includes('JSON解析エラー') || 
+              errorMessage.includes('Expecting value')) {
+            errorMessage = 'レシート画像を選択してください。画像がレシートとして認識できませんでした。';
+          }
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -327,6 +337,12 @@ export async function analyzeReceiptOCR(imageUri: string): Promise<OCRResult> {
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
       
       console.error('❌ [OCR] Attempt failed:', retryCount, '/', maxRetries, errorMessage);
+
+      // 400エラー（Bad Request）の場合はリトライしない（クライアント側の問題なので）
+      if (errorMessage.includes('レシート画像を選択してください') || 
+          errorMessage.includes('HTTP error! status: 400')) {
+        throw error;
+      }
 
       // ネットワークエラーの場合のみリトライ
       if (error instanceof TypeError && (error.message === 'Network request failed' || error.message.includes('Network'))) {
