@@ -4,6 +4,7 @@ import { getInventoryList, deleteInventoryItem, InventoryItem } from '../api/inv
 import { Picker } from '@react-native-picker/picker';
 import InventoryEditModal from './InventoryEditModal';
 import InventoryCSVUploadModal from './InventoryCSVUploadModal';
+import InventoryOCRModal from './InventoryOCRModal';
 
 interface InventoryPanelProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isCSVUploadModalOpen, setIsCSVUploadModalOpen] = useState(false);
+  const [isOCRModalOpen, setIsOCRModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -261,6 +263,12 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
             >
               <Text style={styles.csvUploadButtonText}>📄 CSVアップロード</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setIsOCRModalOpen(true)}
+              style={styles.ocrButton}
+            >
+              <Text style={styles.ocrButtonText}>📷 レシートOCR</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
         
@@ -276,6 +284,13 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
         <InventoryCSVUploadModal
           isOpen={isCSVUploadModalOpen}
           onClose={() => setIsCSVUploadModalOpen(false)}
+          onUploadComplete={loadInventory}
+        />
+        
+        {/* レシートOCRモーダル */}
+        <InventoryOCRModal
+          isOpen={isOCRModalOpen}
+          onClose={() => setIsOCRModalOpen(false)}
           onUploadComplete={loadInventory}
         />
       </View>
@@ -485,6 +500,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   csvUploadButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  ocrButton: {
+    backgroundColor: '#8b5cf6',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  ocrButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
