@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet
 import { getInventoryList, deleteInventoryItem, InventoryItem } from '../api/inventory-api';
 import { Picker } from '@react-native-picker/picker';
 import InventoryEditModal from './InventoryEditModal';
+import InventoryCSVUploadModal from './InventoryCSVUploadModal';
 
 interface InventoryPanelProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isCSVUploadModalOpen, setIsCSVUploadModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -253,6 +255,12 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
             >
               <Text style={styles.addButtonText}>+ 新規追加</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setIsCSVUploadModalOpen(true)}
+              style={styles.csvUploadButton}
+            >
+              <Text style={styles.csvUploadButtonText}>📄 CSVアップロード</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
         
@@ -262,6 +270,13 @@ const InventoryPanel: React.FC<InventoryPanelProps> = ({ isOpen, onClose }) => {
           onClose={handleEditModalClose}
           item={editingItem}
           onSave={handleEditModalSave}
+        />
+        
+        {/* CSVアップロードモーダル */}
+        <InventoryCSVUploadModal
+          isOpen={isCSVUploadModalOpen}
+          onClose={() => setIsCSVUploadModalOpen(false)}
+          onUploadComplete={loadInventory}
         />
       </View>
     </Modal>
@@ -457,6 +472,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  csvUploadButton: {
+    backgroundColor: '#10b981',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  csvUploadButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
