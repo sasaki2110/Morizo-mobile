@@ -34,7 +34,21 @@ export function normalizeSpeechText(text: string): string {
   
   let normalizedText = text;
   
-  // 各置換ルールを順番に適用
+  // 1. 改行文字（\n, \r）の除去
+  normalizedText = normalizedText.replace(/[\n\r]/g, '');
+  
+  // 2. 不要なカンマ（、）の除去
+  // - 末尾のカンマを除去
+  normalizedText = normalizedText.replace(/[、，]+$/g, '');
+  // - 先頭のカンマを除去
+  normalizedText = normalizedText.replace(/^[、，]+/g, '');
+  // - 連続するカンマを1つに（念のため）
+  normalizedText = normalizedText.replace(/[、，]{2,}/g, '、');
+  
+  // 3. 前後の空白文字のトリム
+  normalizedText = normalizedText.trim();
+  
+  // 4. 各置換ルールを順番に適用（ひらがな→漢字など）
   REPLACEMENT_RULES.forEach(rule => {
     // すべての出現箇所を置換（gフラグ相当の動作）
     normalizedText = normalizedText.replace(new RegExp(rule.from, 'g'), rule.to);
