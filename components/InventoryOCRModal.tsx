@@ -5,6 +5,7 @@ import { OCRItem, addInventoryItem } from '../api/inventory-api';
 import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
 import { useImagePicker } from '../hooks/useImagePicker';
 import { useOCRAnalysis } from '../hooks/useOCRAnalysis';
+import { useItemSelection } from '../hooks/useItemSelection';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -19,9 +20,10 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
 }) => {
   const { imageUri, selectImage, clearImage } = useImagePicker();
   const { ocrResult, isAnalyzing, analyzeImage, editableItems, setEditableItems, clearResult } = useOCRAnalysis();
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const { selectedItems, toggleItem, selectAll, clearSelection } = useItemSelection(editableItems);
   const [isRegistering, setIsRegistering] = useState(false);
   const previousImageUriRef = useRef<string | null>(null);
+  const previousItemsLengthRef = useRef<number>(0);
 
   const handleImageSelect = async () => {
     await selectImage();
@@ -32,17 +34,25 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
     // 新しい画像が選択された場合（前回がnullで今回がnull以外、または前回がnull以外で今回もnull以外かつ値が変わった場合）
     if (imageUri !== null && (previousImageUriRef.current === null || previousImageUriRef.current !== imageUri)) {
       clearResult();
-      setSelectedItems(new Set());
+      clearSelection();
+      previousItemsLengthRef.current = 0;
     }
     previousImageUriRef.current = imageUri;
-  }, [imageUri, clearResult]);
+  }, [imageUri, clearResult, clearSelection]);
 
   // OCR解析が完了してアイテムが抽出されたとき、すべてのアイテムを選択状態にする
+  // アイテム数が0から1以上に変わったときのみ全選択（編集による変更では全選択しない）
   useEffect(() => {
-    if (editableItems.length > 0) {
-      setSelectedItems(new Set(editableItems.map((_, idx) => idx)));
+    const previousLength = previousItemsLengthRef.current;
+    const currentLength = editableItems.length;
+    
+    if (previousLength === 0 && currentLength > 0) {
+      // OCR解析が完了してアイテムが抽出されたとき
+      selectAll(true);
     }
-  }, [editableItems]);
+    
+    previousItemsLengthRef.current = currentLength;
+  }, [editableItems.length, selectAll]);
 
   const handleAnalyze = async () => {
     if (!imageUri) {
@@ -58,23 +68,6 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
     setEditableItems(updated);
   };
 
-  const handleItemToggle = (index: number) => {
-    const newSelected = new Set(selectedItems);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
-    }
-    setSelectedItems(newSelected);
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedItems(new Set(editableItems.map((_, idx) => idx)));
-    } else {
-      setSelectedItems(new Set());
-    }
-  };
 
   const handleRegister = async () => {
     if (selectedItems.size === 0) {
@@ -130,7 +123,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   const handleClose = () => {
     clearImage();
     clearResult();
-    setSelectedItems(new Set());
+    clearSelection();
     onClose();
   };
 
@@ -247,7 +240,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
                     <Text style={styles.selectAllLabel}>全選択</Text>
                     <Switch
                       value={selectedItems.size === editableItems.length && editableItems.length > 0}
-                      onValueChange={handleSelectAll}
+                      onValueChange={selectAll}
                     />
                   </View>
 
@@ -262,7 +255,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
                         <View style={styles.checkboxCell}>
                           <Switch
                             value={selectedItems.has(index)}
-                            onValueChange={() => handleItemToggle(index)}
+                            onValueChange={() => toggleItem(index)}
                           />
                         </View>
 
