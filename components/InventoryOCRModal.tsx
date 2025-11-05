@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicat
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import { analyzeReceiptOCR, OCRItem, OCRResult, addInventoryItem } from '../api/inventory-api';
+import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
+import { validateImage } from '../lib/utils/image-validation';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -22,9 +24,6 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [isRegistering, setIsRegistering] = useState(false);
 
-  const units = ['個', 'kg', 'g', 'L', 'ml', '本', 'パック', '袋'];
-  const storageLocations = ['冷蔵庫', '冷凍庫', '常温倉庫', '野菜室', 'その他'];
-
   const handleImageSelect = async () => {
     try {
       // 権限をリクエスト
@@ -43,19 +42,10 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0];
         
-        // ファイル形式チェック
-        const validExtensions = ['.jpg', '.jpeg', '.png'];
-        const fileName = selectedImage.uri.toLowerCase();
-        const isValidFormat = validExtensions.some(ext => fileName.endsWith(ext));
-        
-        if (!isValidFormat) {
-          Alert.alert('エラー', 'JPEGまたはPNGファイルのみアップロード可能です');
-          return;
-        }
-
-        // ファイルサイズチェック（10MB）
-        if (selectedImage.fileSize && selectedImage.fileSize > 10 * 1024 * 1024) {
-          Alert.alert('エラー', 'ファイルサイズは10MB以下にしてください');
+        // ファイル形式とサイズの検証
+        const validation = validateImage(selectedImage.uri, selectedImage.fileSize);
+        if (!validation.isValid) {
+          Alert.alert('エラー', validation.errors[0]);
           return;
         }
 
@@ -349,7 +339,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
                             onValueChange={(value) => handleItemEdit(index, 'unit', value)}
                             style={styles.itemPicker}
                           >
-                            {units.map(u => (
+                            {UNITS.map(u => (
                               <Picker.Item key={u} label={u} value={u} />
                             ))}
                           </Picker>
@@ -362,7 +352,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
                             onValueChange={(value) => handleItemEdit(index, 'storage_location', value)}
                             style={styles.itemPicker}
                           >
-                            {storageLocations.map(loc => (
+                            {STORAGE_LOCATIONS.map(loc => (
                               <Picker.Item key={loc} label={loc} value={loc} />
                             ))}
                           </Picker>
