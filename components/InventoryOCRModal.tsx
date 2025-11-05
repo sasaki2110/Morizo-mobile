@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicator, ScrollView, FlatList, Image, TextInput, Switch } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import { analyzeReceiptOCR, OCRItem, OCRResult, addInventoryItem } from '../api/inventory-api';
 import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
-import { validateImage } from '../lib/utils/image-validation';
+import { useImagePicker } from '../hooks/useImagePicker';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -17,49 +16,28 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   onClose,
   onUploadComplete,
 }) => {
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const { imageUri, selectImage, clearImage } = useImagePicker();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null);
   const [editableItems, setEditableItems] = useState<OCRItem[]>([]);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [isRegistering, setIsRegistering] = useState(false);
+  const previousImageUriRef = useRef<string | null>(null);
 
   const handleImageSelect = async () => {
-    try {
-      // 権限をリクエスト
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('エラー', 'フォトライブラリへのアクセス権限が必要です');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImage = result.assets[0];
-        
-        // ファイル形式とサイズの検証
-        const validation = validateImage(selectedImage.uri, selectedImage.fileSize);
-        if (!validation.isValid) {
-          Alert.alert('エラー', validation.errors[0]);
-          return;
-        }
-
-        setImageUri(selectedImage.uri);
-        setOcrResult(null);
-        setEditableItems([]);
-        setSelectedItems(new Set());
-      }
-    } catch (error) {
-      console.error('Image selection failed:', error);
-      const errorMessage = error instanceof Error ? error.message : '画像選択に失敗しました';
-      Alert.alert('エラー', errorMessage);
-    }
+    await selectImage();
   };
+
+  // 画像選択時に他の状態をリセット（新しい画像が選択されたとき）
+  useEffect(() => {
+    // 新しい画像が選択された場合（前回がnullで今回がnull以外、または前回がnull以外で今回もnull以外かつ値が変わった場合）
+    if (imageUri !== null && (previousImageUriRef.current === null || previousImageUriRef.current !== imageUri)) {
+      setOcrResult(null);
+      setEditableItems([]);
+      setSelectedItems(new Set());
+    }
+    previousImageUriRef.current = imageUri;
+  }, [imageUri]);
 
   const handleAnalyze = async () => {
     if (!imageUri) {
@@ -167,7 +145,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   };
 
   const handleClose = () => {
-    setImageUri(null);
+    clearImage();
     setOcrResult(null);
     setEditableItems([]);
     setSelectedItems(new Set());
