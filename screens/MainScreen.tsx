@@ -5,13 +5,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { showErrorAlert, showSuccessAlert } from '../utils/alert';
 import { logAPI, logComponent, LogCategory } from '../lib/logging';
-import LogViewerScreen from '../lib/logging/viewer/LogViewerScreen';
 // import { runAllTests } from '../tests';
 
 export default function MainScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiResponse, setApiResponse] = useState<string>('');
-  const [showLogViewer, setShowLogViewer] = useState(false);
   const { user, session, signOut } = useAuth();
 
   // コンポーネント初期化ログ
@@ -124,16 +122,6 @@ export default function MainScreen() {
     }
   };
 
-  const handleShowLogViewer = () => {
-    logComponent('MainScreen', 'log_viewer_button_clicked');
-    setShowLogViewer(true);
-  };
-
-  const handleCloseLogViewer = () => {
-    logComponent('MainScreen', 'log_viewer_closed');
-    setShowLogViewer(false);
-  };
-
   // iOS用ログ強制生成テスト
   const handleForceGenerateLogs = () => {
     console.log('=== iOS ログ強制生成開始 ===');
@@ -203,16 +191,8 @@ export default function MainScreen() {
       >
         <Text style={styles.buttonText}>
           {isLoading ? 'API確認中...' : 'API確認'}
-        </Text>
-      </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.logViewerButton}
-          onPress={handleShowLogViewer}
-        >
-          <Text style={styles.logViewerButtonText}>ログ確認</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
           style={styles.forceLogButton}
           onPress={handleForceGenerateLogs}
@@ -246,13 +226,6 @@ export default function MainScreen() {
           <Text style={styles.responseText}>{apiResponse}</Text>
         </View>
       ) : null}
-      
-      {showLogViewer && (
-        <LogViewerScreen 
-          visible={showLogViewer}
-          onClose={handleCloseLogViewer}
-        />
-      )}
       
       <StatusBar style="auto" />
     </View>
@@ -325,18 +298,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#666',
     fontFamily: 'monospace',
-  },
-  logViewerButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 8,
-    marginBottom: 20,
-  },
-  logViewerButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   forceLogButton: {
     backgroundColor: '#ff6b6b',
