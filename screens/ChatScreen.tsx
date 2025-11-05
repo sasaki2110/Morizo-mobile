@@ -35,6 +35,7 @@ import { useRecipeSelection } from '../hooks/useRecipeSelection';
 import { useChatMessages } from '../hooks/useChatMessages';
 import { useSSEHandling } from '../hooks/useSSEHandling';
 import { ChatMessage } from '../types/chat';
+import { generateSSESessionId } from '../lib/session-manager';
 
 export default function ChatScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -111,7 +112,7 @@ export default function ChatScreen() {
   const handleVoiceTranscription = async (text: string) => {
     setIsVoiceChatLoading(true);
     
-      // ユーザーメッセージを追加
+    // ユーザーメッセージを追加
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
@@ -119,6 +120,44 @@ export default function ChatScreen() {
       timestamp: new Date(),
     };
     setChatMessages(prev => [...prev, userMessage]);
+    
+    // スクロールを最下部に移動
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    
+    // SSEセッションIDの決定と送信時の確認応答フラグを記録
+    // テキスト入力と同じロジックを使用
+    let sseSessionId: string;
+    const isConfirmationRequest = chatMessagesHook.awaitingConfirmation && !!chatMessagesHook.confirmationSessionId;
+
+    if (isConfirmationRequest) {
+      // 曖昧性確認中の場合は既存のセッションIDを使用
+      sseSessionId = chatMessagesHook.confirmationSessionId!;
+      console.log('[DEBUG] Voice: Using existing session ID:', sseSessionId);
+    } else {
+      // 新規リクエストの場合は新しいセッションIDを生成
+      sseSessionId = generateSSESessionId();
+      console.log('[DEBUG] Voice: Generated new session ID:', sseSessionId);
+    }
+    
+    console.log('[DEBUG] Voice: Sending request with:', {
+      message: text,
+      sse_session_id: sseSessionId,
+      confirm: isConfirmationRequest,
+      awaitingConfirmation: chatMessagesHook.awaitingConfirmation,
+      confirmationSessionId: chatMessagesHook.confirmationSessionId
+    });
+    
+    // ストリーミング進捗表示を追加（テキスト入力と同じ処理）
+    const streamingMessage: ChatMessage = {
+      id: (Date.now() + 1).toString(),
+      type: 'streaming',
+      content: '',
+      timestamp: new Date(),
+      sseSessionId: sseSessionId,
+    };
+    setChatMessages(prev => [...prev, streamingMessage]);
     
     // スクロールを最下部に移動
     setTimeout(() => {
@@ -141,7 +180,11 @@ export default function ChatScreen() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${currentSession.access_token}`,
         },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ 
+          message: text,
+          sse_session_id: sseSessionId,
+          confirm: isConfirmationRequest
+        }),
       });
 
       if (!response.ok) {
@@ -150,31 +193,39 @@ export default function ChatScreen() {
 
       const data = await response.json();
       
-      // AIレスポンスを追加
-      const aiMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: data.response,
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, aiMessage]);
+      console.log('[DEBUG] Voice: HTTP Response received (for reference only):', {
+        success: data.success,
+        has_response: !!data.response
+      });
       
-      // スクロールを最下部に移動
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      // 確認応答を送信した場合のみ、状態をリセット
+      if (isConfirmationRequest && data.success && !data.requires_confirmation) {
+        console.log('[DEBUG] Voice: Confirmation response completed, resetting confirmation state');
+        chatMessagesHook.setAwaitingConfirmation(false);
+        chatMessagesHook.setConfirmationSessionId(null);
+      }
+      
+      // StreamingProgressがSSE接続を処理するため、ここではHTTPレスポンスの処理は不要
+      // SSEのcompleteイベントでonCompleteハンドラが呼ばれ、選択欄が表示される
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '不明なエラー';
       
-      // エラーメッセージを追加
-      const errorMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: `エラー: ${errorMessage}`,
-        timestamp: new Date(),
-      };
-      setChatMessages(prev => [...prev, errorMsg]);
+      // エラー時はストリーミング進捗表示をエラーメッセージに置き換え
+      setChatMessages(prev => prev.map((msg) => 
+        msg.type === 'streaming' && msg.sseSessionId === sseSessionId
+          ? { 
+              id: msg.id,
+              type: 'ai', 
+              content: `エラー: ${errorMessage}`,
+              timestamp: msg.timestamp
+            }
+          : msg
+      ));
+      
+      // エラー時は確認状態をリセット
+      chatMessagesHook.setAwaitingConfirmation(false);
+      chatMessagesHook.setConfirmationSessionId(null);
       
       showErrorAlert(`音声チャット送信に失敗しました: ${errorMessage}`);
     } finally {
