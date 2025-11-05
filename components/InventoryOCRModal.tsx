@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicator, ScrollView, FlatList, Image, TextInput, Switch } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { OCRItem, addInventoryItem } from '../api/inventory-api';
+import { OCRItem } from '../api/inventory-api';
 import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
 import { useImagePicker } from '../hooks/useImagePicker';
 import { useOCRAnalysis } from '../hooks/useOCRAnalysis';
 import { useItemSelection } from '../hooks/useItemSelection';
+import { useItemRegistration } from '../hooks/useItemRegistration';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
   const { imageUri, selectImage, clearImage } = useImagePicker();
   const { ocrResult, isAnalyzing, analyzeImage, editableItems, setEditableItems, clearResult } = useOCRAnalysis();
   const { selectedItems, toggleItem, selectAll, clearSelection } = useItemSelection(editableItems);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const { isRegistering, registerItems } = useItemRegistration(onUploadComplete);
   const previousImageUriRef = useRef<string | null>(null);
   const previousItemsLengthRef = useRef<number>(0);
 
@@ -70,54 +71,8 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
 
 
   const handleRegister = async () => {
-    if (selectedItems.size === 0) {
-      Alert.alert('エラー', '登録するアイテムを選択してください');
-      return;
-    }
-
-    setIsRegistering(true);
-
-    try {
-      // 選択されたアイテムのみを登録
-      const itemsToRegister = Array.from(selectedItems).map(idx => editableItems[idx]);
-      
-      // 個別登録APIを呼び出す
-      let successCount = 0;
-      const errors: string[] = [];
-
-      for (const item of itemsToRegister) {
-        try {
-          await addInventoryItem(item);
-          successCount++;
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : '登録失敗';
-          errors.push(`${item.item_name}: ${errorMessage}`);
-        }
-      }
-
-      if (successCount > 0) {
-        Alert.alert(
-          '成功',
-          `${successCount}件のアイテムを登録しました${errors.length > 0 ? `\nエラー: ${errors.length}件` : ''}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onUploadComplete();
-                handleClose();
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('エラー', `登録に失敗しました: ${errors.join(', ')}`);
-      }
-    } catch (error) {
-      console.error('Registration failed:', error);
-      Alert.alert('エラー', '登録に失敗しました');
-    } finally {
-      setIsRegistering(false);
-    }
+    const itemsToRegister = Array.from(selectedItems).map(idx => editableItems[idx]);
+    await registerItems(itemsToRegister, handleClose);
   };
 
   const handleClose = () => {
