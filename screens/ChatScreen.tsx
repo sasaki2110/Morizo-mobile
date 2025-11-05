@@ -36,6 +36,7 @@ import { useChatMessages } from '../hooks/useChatMessages';
 import { useSSEHandling } from '../hooks/useSSEHandling';
 import { ChatMessage } from '../types/chat';
 import { generateSSESessionId } from '../lib/session-manager';
+import { normalizeSpeechText } from '../lib/utils/speech-normalizer';
 
 export default function ChatScreen() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -112,11 +113,26 @@ export default function ChatScreen() {
   const handleVoiceTranscription = async (text: string) => {
     setIsVoiceChatLoading(true);
     
-    // ユーザーメッセージを追加
+    // 音声認識結果を正規化（ひらがな→漢字など）
+    const normalizedText = normalizeSpeechText(text);
+    
+    // 正規化が行われた場合にログを出力
+    if (normalizedText !== text) {
+      console.log('[DEBUG] Voice: Text normalization applied', { 
+        original: text, 
+        normalized: normalizedText 
+      });
+      logComponent('ChatScreen', 'voice_text_normalized', {
+        original: text,
+        normalized: normalizedText
+      });
+    }
+    
+    // ユーザーメッセージを追加（正規化後のテキストを表示）
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
-      content: text,
+      content: normalizedText,
       timestamp: new Date(),
     };
     setChatMessages(prev => [...prev, userMessage]);
@@ -142,7 +158,8 @@ export default function ChatScreen() {
     }
     
     console.log('[DEBUG] Voice: Sending request with:', {
-      message: text,
+      message: normalizedText,
+      original_message: text,
       sse_session_id: sseSessionId,
       confirm: isConfirmationRequest,
       awaitingConfirmation: chatMessagesHook.awaitingConfirmation,
@@ -181,7 +198,7 @@ export default function ChatScreen() {
           'Authorization': `Bearer ${currentSession.access_token}`,
         },
         body: JSON.stringify({ 
-          message: text,
+          message: normalizedText,  // 正規化後のテキストを送信
           sse_session_id: sseSessionId,
           confirm: isConfirmationRequest
         }),
