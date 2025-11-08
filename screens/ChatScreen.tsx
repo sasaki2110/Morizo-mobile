@@ -1,25 +1,21 @@
 /**
  * Morizo Mobile - チャット画面
  * 
- * Phase 1: 音声録音機能の分離完了
- * 音声録音機能をuseVoiceRecordingフックに分離して保守性を向上
+ * Phase 4: リファクタリング完了
+ * 音声録音機能、UIセクション、認証チェック、チャット履歴管理を分離して保守性を向上
  */
 
 import React, { useState, useRef } from 'react';
 import {
-  View,
-  Text,
   ScrollView,
   StyleSheet,
   Alert,
   Platform,
   KeyboardAvoidingView,
   SafeAreaView,
-  TouchableOpacity,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../contexts/AuthContext';
-import { logComponent } from '../lib/logging';
 import RecipeViewerScreen from './RecipeViewerScreen';
 import RecipeListModal from '../components/RecipeListModal';
 import HistoryPanel from '../components/HistoryPanel';
@@ -27,6 +23,9 @@ import InventoryPanel from '../components/InventoryPanel';
 import UserProfileModal from '../components/UserProfileModal';
 import ChatInput from '../components/ChatInput';
 import ChatMessageList from '../components/ChatMessageList';
+import { ProfileSection } from '../components/ProfileSection';
+import { VoiceSection } from '../components/VoiceSection';
+import { AuthGuard } from '../components/AuthGuard';
 import { useModalManagement } from '../hooks/useModalManagement';
 import { useRecipeSelection } from '../hooks/useRecipeSelection';
 import { useChatMessages } from '../hooks/useChatMessages';
@@ -34,33 +33,14 @@ import { useSSEHandling } from '../hooks/useSSEHandling';
 import { useVoiceRecording } from '../hooks/useVoiceRecording';
 import { ChatMessage } from '../types/chat';
 
-export default function ChatScreen() {
+function ChatScreenContent() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTextChatLoading, setIsTextChatLoading] = useState(false);
   const [isVoiceChatLoading, setIsVoiceChatLoading] = useState(false);
   const [awaitingSelection, setAwaitingSelection] = useState<boolean>(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
-  const { user, session, signOut } = useAuth();
-
-  // 認証状態の確認
-  const isAuthenticated = !!(session && user && session.user?.id === user.id);
-
-  // コンポーネント初期化ログ
-  React.useEffect(() => {
-    logComponent('ChatScreen', 'component_mounted', { 
-      hasUser: !!user, 
-      hasSession: !!session,
-      platform: Platform.OS 
-    });
-  }, []);
-
-
-  // 未認証の場合は何もしない
-  if (!isAuthenticated) {
-    logComponent('ChatScreen', 'auth_not_authenticated');
-    return null;
-  }
+  const { user } = useAuth();
 
   // カスタムフック
   const modalManagement = useModalManagement();
@@ -93,27 +73,6 @@ export default function ChatScreen() {
     chatMessagesHook.getApiUrl
   );
 
-  // チャット履歴クリア処理
-  const handleClearHistory = () => {
-    Alert.alert(
-      'チャット履歴をクリア',
-      'チャット履歴と選択済みレシピを削除しますか？',
-      [
-        {
-          text: 'キャンセル',
-          style: 'cancel',
-        },
-        {
-          text: 'クリア',
-          style: 'destructive',
-          onPress: () => {
-            chatMessagesHook.clearChatHistory(setAwaitingSelection, recipeSelection.clearSelectedRecipes);
-          },
-        },
-      ]
-    );
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -122,18 +81,10 @@ export default function ChatScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* ユーザープロフィールセクション（アバターアイコンのみ） */}
-        <View style={styles.profileSection}>
-          <TouchableOpacity
-            style={styles.avatarButton}
-            onPress={() => setIsProfileModalOpen(true)}
-          >
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarText}>
-                {user?.email?.charAt(0).toUpperCase() || 'U'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+        <ProfileSection
+          userEmail={user?.email}
+          onPress={() => setIsProfileModalOpen(true)}
+        />
 
         {/* チャット履歴エリア */}
         <ChatMessageList
@@ -145,7 +96,25 @@ export default function ChatScreen() {
           isSavingMenu={recipeSelection.isSavingMenu}
           savedMessage={recipeSelection.savedMessage}
           onSaveMenu={recipeSelection.handleSaveMenu}
-          onClearHistory={handleClearHistory}
+          onClearHistory={() => {
+            Alert.alert(
+              'チャット履歴をクリア',
+              'チャット履歴と選択済みレシピを削除しますか？',
+              [
+                {
+                  text: 'キャンセル',
+                  style: 'cancel',
+                },
+                {
+                  text: 'クリア',
+                  style: 'destructive',
+                  onPress: () => {
+                    chatMessagesHook.clearChatHistory(setAwaitingSelection, recipeSelection.clearSelectedRecipes);
+                  },
+                },
+              ]
+            );
+          }}
           onSelect={recipeSelection.handleSelection}
           onViewList={modalManagement.handleViewList}
           onRequestMore={sseHandling.handleRequestMore}
@@ -168,31 +137,13 @@ export default function ChatScreen() {
         />
 
         {/* 音声チャット欄 */}
-        <View style={styles.voiceSection}>
-          <Text style={styles.voiceSectionTitle}>音声チャット</Text>
-          <TouchableOpacity
-            style={[
-              styles.voiceButton,
-              voiceRecording.isRecording && styles.voiceButtonRecording,
-              (isVoiceChatLoading || isTextChatLoading) && styles.voiceButtonDisabled
-            ]}
-            onPress={voiceRecording.isRecording ? voiceRecording.stopRecording : voiceRecording.startRecording}
-            disabled={isVoiceChatLoading || isTextChatLoading}
-          >
-            <Text style={[
-              styles.voiceButtonText,
-              voiceRecording.isRecording && styles.voiceButtonTextRecording
-            ]}>
-              {isVoiceChatLoading ? '音声処理中...' : 
-               voiceRecording.isRecording ? '⏹️ 録音停止' : '🎤 音声録音'}
-            </Text>
-          </TouchableOpacity>
-          {voiceRecording.isRecording && (
-            <Text style={styles.recordingStatusText}>
-              ● 録音中... タップして停止
-            </Text>
-          )}
-        </View>
+        <VoiceSection
+          isRecording={voiceRecording.isRecording}
+          isVoiceChatLoading={isVoiceChatLoading}
+          isTextChatLoading={isTextChatLoading}
+          onStartRecording={voiceRecording.startRecording}
+          onStopRecording={voiceRecording.stopRecording}
+        />
 
         <StatusBar style="auto" />
       </KeyboardAvoidingView>
@@ -242,6 +193,14 @@ export default function ChatScreen() {
   );
 }
 
+export default function ChatScreen() {
+  return (
+    <AuthGuard>
+      <ChatScreenContent />
+    </AuthGuard>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -249,71 +208,5 @@ const styles = StyleSheet.create({
   },
   keyboardAvoidingView: {
     flex: 1,
-  },
-  profileSection: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 8 : 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    alignItems: 'flex-end',
-  },
-  avatarButton: {
-    padding: 8,
-    marginTop: Platform.OS === 'android' ? 4 : 0,
-  },
-  avatarContainer: {
-    width: 44,
-    height: 44,
-    backgroundColor: '#e3f2fd',
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1976d2',
-  },
-  voiceSection: {
-    backgroundColor: '#fff',
-    marginHorizontal: 15,
-    marginBottom: Platform.OS === 'ios' ? 0 : 10,
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-  },
-  voiceSectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-  },
-  voiceButton: {
-    backgroundColor: '#4caf50',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 25,
-  },
-  voiceButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  voiceButtonRecording: {
-    backgroundColor: '#f44336',
-  },
-  voiceButtonTextRecording: {
-    color: '#fff',
-  },
-  voiceButtonDisabled: {
-    backgroundColor: '#ccc',
-  },
-  recordingStatusText: {
-    fontSize: 12,
-    color: '#f44336',
-    marginTop: 8,
-    fontWeight: 'bold',
   },
 });
