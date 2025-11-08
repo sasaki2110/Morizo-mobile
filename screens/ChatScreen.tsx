@@ -24,7 +24,6 @@ import UserProfileModal from '../components/UserProfileModal';
 import ChatInput from '../components/ChatInput';
 import ChatMessageList from '../components/ChatMessageList';
 import { ProfileSection } from '../components/ProfileSection';
-import { VoiceSection } from '../components/VoiceSection';
 import { AuthGuard } from '../components/AuthGuard';
 import { useModalManagement } from '../hooks/useModalManagement';
 import { useRecipeSelection } from '../hooks/useRecipeSelection';
@@ -72,6 +71,18 @@ function ChatScreenContent() {
     chatMessagesHook,
     chatMessagesHook.getApiUrl
   );
+
+  // 現在のステージ情報を取得（最新の選択要求メッセージから）
+  const currentStage = React.useMemo(() => {
+    // 最新の選択要求メッセージを探す
+    for (let i = chatMessages.length - 1; i >= 0; i--) {
+      const message = chatMessages[i];
+      if (message.requiresSelection && message.currentStage) {
+        return message.currentStage;
+      }
+    }
+    return undefined;
+  }, [chatMessages]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -133,14 +144,9 @@ function ChatScreenContent() {
           onSend={chatMessagesHook.sendTextMessage}
           isTextChatLoading={isTextChatLoading}
           awaitingSelection={awaitingSelection}
+          currentStage={currentStage}
           isVoiceChatLoading={isVoiceChatLoading}
-        />
-
-        {/* 音声チャット欄 */}
-        <VoiceSection
           isRecording={voiceRecording.isRecording}
-          isVoiceChatLoading={isVoiceChatLoading}
-          isTextChatLoading={isTextChatLoading}
           onStartRecording={voiceRecording.startRecording}
           onStopRecording={voiceRecording.stopRecording}
         />
