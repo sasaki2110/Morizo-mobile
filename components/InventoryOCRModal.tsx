@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicator, ScrollView, FlatList, Image, TextInput, Switch } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { OCRItem } from '../api/inventory-api';
 import { UNITS, STORAGE_LOCATIONS } from '../lib/utils/ocr-constants';
 import { useImagePicker } from '../hooks/useImagePicker';
 import { useOCRAnalysis } from '../hooks/useOCRAnalysis';
 import { useItemSelection } from '../hooks/useItemSelection';
 import { useItemRegistration } from '../hooks/useItemRegistration';
+import EditableItemList from './ocr/EditableItemList';
 
 interface InventoryOCRModalProps {
   isOpen: boolean;
@@ -187,109 +187,15 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
                 </View>
 
                 {/* アイテム一覧（編集可能） */}
-                <View style={styles.section}>
-                  <Text style={styles.label}>抽出されたアイテム（編集・選択可能）</Text>
-                  
-                  {/* 全選択/全解除 */}
-                  <View style={styles.selectAllRow}>
-                    <Text style={styles.selectAllLabel}>全選択</Text>
-                    <Switch
-                      value={selectedItems.size === editableItems.length && editableItems.length > 0}
-                      onValueChange={selectAll}
-                    />
-                  </View>
-
-                  {/* アイテムリスト */}
-                  <FlatList
-                    data={editableItems}
-                    keyExtractor={(_, index) => `item-${index}`}
-                    scrollEnabled={false}
-                    renderItem={({ item, index }) => (
-                      <View style={styles.itemRow}>
-                        {/* 選択チェックボックス */}
-                        <View style={styles.checkboxCell}>
-                          <Switch
-                            value={selectedItems.has(index)}
-                            onValueChange={() => toggleItem(index)}
-                          />
-                        </View>
-
-                        {/* アイテム名 */}
-                        <View style={styles.itemNameCell}>
-                          <TextInput
-                            style={styles.itemInput}
-                            value={item.item_name}
-                            onChangeText={(value) => handleItemEdit(index, 'item_name', value)}
-                            placeholder="アイテム名"
-                            placeholderTextColor="#999"
-                          />
-                        </View>
-
-                        {/* 数量 */}
-                        <View style={styles.quantityCell}>
-                          <TextInput
-                            style={styles.itemInput}
-                            value={item.quantity.toString()}
-                            onChangeText={(value) => {
-                              const num = parseFloat(value);
-                              handleItemEdit(index, 'quantity', isNaN(num) ? 0 : num);
-                            }}
-                            keyboardType="numeric"
-                            placeholder="0"
-                            placeholderTextColor="#999"
-                          />
-                        </View>
-
-                        {/* 単位 */}
-                        <View style={styles.unitCell}>
-                          <Picker
-                            selectedValue={item.unit}
-                            onValueChange={(value) => handleItemEdit(index, 'unit', value)}
-                            style={styles.itemPicker}
-                          >
-                            {UNITS.map(u => (
-                              <Picker.Item key={u} label={u} value={u} />
-                            ))}
-                          </Picker>
-                        </View>
-
-                        {/* 保管場所 */}
-                        <View style={styles.locationCell}>
-                          <Picker
-                            selectedValue={item.storage_location || '冷蔵庫'}
-                            onValueChange={(value) => handleItemEdit(index, 'storage_location', value)}
-                            style={styles.itemPicker}
-                          >
-                            {STORAGE_LOCATIONS.map(loc => (
-                              <Picker.Item key={loc} label={loc} value={loc} />
-                            ))}
-                          </Picker>
-                        </View>
-
-                        {/* 消費期限 */}
-                        <View style={styles.dateCell}>
-                          <TextInput
-                            style={styles.itemInput}
-                            value={item.expiry_date || ''}
-                            onChangeText={(value) => handleItemEdit(index, 'expiry_date', value || null)}
-                            placeholder="YYYY-MM-DD"
-                            placeholderTextColor="#999"
-                          />
-                        </View>
-                      </View>
-                    )}
-                    ListHeaderComponent={() => (
-                      <View style={styles.tableHeader}>
-                        <View style={styles.checkboxCell} />
-                        <View style={styles.itemNameCell}><Text style={styles.headerText}>アイテム名</Text></View>
-                        <View style={styles.quantityCell}><Text style={styles.headerText}>数量</Text></View>
-                        <View style={styles.unitCell}><Text style={styles.headerText}>単位</Text></View>
-                        <View style={styles.locationCell}><Text style={styles.headerText}>保管場所</Text></View>
-                        <View style={styles.dateCell}><Text style={styles.headerText}>消費期限</Text></View>
-                      </View>
-                    )}
-                  />
-                </View>
+                <EditableItemList
+                  items={editableItems}
+                  onItemEdit={handleItemEdit}
+                  selectedItems={selectedItems}
+                  onToggleItem={toggleItem}
+                  onSelectAll={selectAll}
+                  units={UNITS}
+                  storageLocations={STORAGE_LOCATIONS}
+                />
 
                 {/* 登録ボタン */}
                 <View style={styles.section}>
@@ -460,78 +366,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#dc2626',
     marginBottom: 2,
-  },
-  selectAllRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  selectAllLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderBottomWidth: 2,
-    borderBottomColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
-  },
-  headerText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#4b5563',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    alignItems: 'center',
-  },
-  checkboxCell: {
-    width: 50,
-    alignItems: 'center',
-  },
-  itemNameCell: {
-    flex: 2,
-    marginRight: 4,
-  },
-  quantityCell: {
-    flex: 1,
-    marginRight: 4,
-  },
-  unitCell: {
-    flex: 1,
-    marginRight: 4,
-  },
-  locationCell: {
-    flex: 1.5,
-    marginRight: 4,
-  },
-  dateCell: {
-    flex: 1.5,
-  },
-  itemInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    backgroundColor: '#ffffff',
-    fontSize: 12,
-    color: '#1f2937',
-  },
-  itemPicker: {
-    height: 40,
-    backgroundColor: '#ffffff',
   },
   registerButton: {
     backgroundColor: '#10b981',
