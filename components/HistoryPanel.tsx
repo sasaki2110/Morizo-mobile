@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, StyleSheet, Modal } from 'react-native';
 import { getMenuHistory } from '../api/menu-api';
 import { Picker } from '@react-native-picker/picker';
+import IngredientDeleteModal from './IngredientDeleteModal';
 
 interface HistoryRecipe {
   category: string | null;
@@ -15,6 +16,7 @@ interface HistoryRecipe {
 interface HistoryEntry {
   date: string;
   recipes: HistoryRecipe[];
+  ingredients_deleted?: boolean; // 食材削除済みフラグ（オプショナル）
 }
 
 interface HistoryPanelProps {
@@ -27,6 +29,8 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [days, setDays] = useState(14);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
@@ -58,6 +62,22 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose }) => {
     if (category === 'sub') return '🥗';
     if (category === 'soup') return '🍲';
     return '🍽️';
+  };
+
+  const handleDeleteClick = (date: string) => {
+    setSelectedDate(date);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteComplete = () => {
+    // 削除完了後、該当日付のingredients_deletedフラグを更新
+    setHistory((prevHistory) =>
+      prevHistory.map((entry) =>
+        entry.date === selectedDate
+          ? { ...entry, ingredients_deleted: true }
+          : entry
+      )
+    );
   };
 
   return (
@@ -127,7 +147,21 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose }) => {
             <View style={styles.historyList}>
               {history.map((entry, index) => (
                 <View key={index} style={styles.historyEntry}>
-                  <Text style={styles.dateText}>📆 {formatDate(entry.date)}</Text>
+                  <View style={styles.dateRow}>
+                    <Text style={styles.dateText}>📆 {formatDate(entry.date)}</Text>
+                    {entry.ingredients_deleted ? (
+                      <View style={styles.deletedBadge}>
+                        <Text style={styles.deletedBadgeText}>削除済み</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteClick(entry.date)}
+                        style={styles.deleteButton}
+                      >
+                        <Text style={styles.deleteButtonText}>食材削除</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   {entry.recipes.map((recipe: any, recipeIndex: number) => (
                     <View
                       key={recipeIndex}
@@ -155,6 +189,14 @@ const HistoryPanel: React.FC<HistoryPanelProps> = ({ isOpen, onClose }) => {
           )}
         </ScrollView>
       </View>
+
+      {/* 食材削除モーダル */}
+      <IngredientDeleteModal
+        date={selectedDate}
+        isOpen={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onDeleteComplete={handleDeleteComplete}
+      />
     </Modal>
   );
 };
@@ -244,11 +286,38 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   dateText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: '#4b5563',
-    marginBottom: 8,
+    flex: 1,
+  },
+  deleteButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  deleteButtonText: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  deletedBadge: {
+    backgroundColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  deletedBadgeText: {
+    fontSize: 12,
+    color: '#6b7280',
   },
   recipeCard: {
     flexDirection: 'row',
