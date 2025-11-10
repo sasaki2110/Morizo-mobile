@@ -39,7 +39,7 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
 }) => {
   // カスタムフックの使用
   const { imageUri, selectImage, clearImage } = useImagePicker();
-  const { ocrResult, isAnalyzing, analyzeImage, editableItems, setEditableItems, clearResult } = useOCRAnalysis();
+  const { ocrResult, isAnalyzing, analyzeImage, editableItems, setEditableItems, clearResult, registerMapping } = useOCRAnalysis();
   const { selectedItems, toggleItem, selectAll, clearSelection } = useItemSelection(editableItems);
   const { isRegistering, registerItems } = useItemRegistration(onUploadComplete);
 
@@ -84,8 +84,23 @@ const InventoryOCRModal: React.FC<InventoryOCRModalProps> = ({
 
   const handleItemEdit = (index: number, field: keyof OCRItem, value: string | number | null) => {
     const updated = [...editableItems];
+    const previousItem = updated[index];
     updated[index] = { ...updated[index], [field]: value };
     setEditableItems(updated);
+
+    // item_nameが変更された場合、変換テーブルに登録
+    if (field === 'item_name' && typeof value === 'string') {
+      const originalName = previousItem.original_name || previousItem.item_name;
+      const normalizedName = value.trim();
+
+      // 元の名前と異なり、かつ空でない場合のみ登録
+      if (originalName && normalizedName && originalName !== normalizedName) {
+        // 非同期で変換テーブルに登録（エラーが発生しても既存機能に影響しない）
+        registerMapping(originalName, normalizedName).catch((error) => {
+          console.warn('OCR変換テーブル登録中にエラーが発生しました:', error);
+        });
+      }
+    }
   };
 
   const handleRegister = async () => {

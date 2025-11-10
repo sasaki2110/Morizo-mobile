@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { analyzeReceiptOCR, OCRItem, OCRResult } from '../api/inventory-api';
+import { analyzeReceiptOCR, OCRItem, OCRResult, registerOCRMapping } from '../api/inventory-api';
 
 /**
  * OCR解析処理を管理するカスタムフック
@@ -31,7 +31,12 @@ export function useOCRAnalysis() {
       
       // 編集可能なアイテムリストを作成
       if (result.items && result.items.length > 0) {
-        setEditableItems([...result.items]);
+        // 各アイテムにoriginal_nameを設定（OCRで読み取られた元の名前を保持）
+        const itemsWithOriginalName = result.items.map(item => ({
+          ...item,
+          original_name: item.item_name, // 初期値をoriginal_nameとして保持
+        }));
+        setEditableItems(itemsWithOriginalName);
       } else {
         Alert.alert('情報', 'OCR解析でアイテムが抽出されませんでした');
         setEditableItems([]);
@@ -55,6 +60,20 @@ export function useOCRAnalysis() {
     setEditableItems([]);
   };
 
+  /**
+   * 変換テーブル登録
+   * エラーが発生しても既存機能に影響しないため、警告ログのみ
+   */
+  const registerMapping = useCallback(async (originalName: string, normalizedName: string) => {
+    try {
+      await registerOCRMapping(originalName, normalizedName);
+      console.log(`OCR変換テーブルに登録しました: '${originalName}' -> '${normalizedName}'`);
+    } catch (error) {
+      // エラーが発生しても既存機能に影響しないため、警告ログのみ
+      console.warn('OCR変換テーブル登録中にエラーが発生しました:', error);
+    }
+  }, []);
+
   return {
     ocrResult,
     isAnalyzing,
@@ -62,6 +81,7 @@ export function useOCRAnalysis() {
     editableItems,
     setEditableItems,
     clearResult,
+    registerMapping,
   };
 }
 

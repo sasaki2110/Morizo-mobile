@@ -230,6 +230,7 @@ export interface OCRItem {
   unit: string;
   storage_location: string | null;
   expiry_date: string | null;
+  original_name?: string; // OCRで読み取られた元の名前（変換テーブル登録用）
 }
 
 export interface OCRResult {
@@ -362,5 +363,39 @@ export async function analyzeReceiptOCR(imageUri: string): Promise<OCRResult> {
   }
 
   throw new Error('OCR解析に失敗しました');
+}
+
+// OCR変換テーブル登録API
+export interface OCRMappingResponse {
+  success: boolean;
+  message: string;
+  mapping_id?: string;
+}
+
+export async function registerOCRMapping(
+  originalName: string,
+  normalizedName: string
+): Promise<OCRMappingResponse> {
+  const apiUrl = `${getApiUrl()}/inventory/ocr-mapping`;
+  
+  const response = await authenticatedFetch(apiUrl, {
+    method: 'POST',
+    body: JSON.stringify({
+      original_name: originalName,
+      normalized_name: normalizedName,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+  }
+
+  const result = await response.json();
+  if (result.success) {
+    return result;
+  }
+
+  throw new Error('変換テーブルへの登録に失敗しました');
 }
 
