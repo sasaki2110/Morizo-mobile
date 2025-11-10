@@ -83,27 +83,40 @@ export default function CustomSplashScreen({ onFinish }: SplashScreenProps) {
     return null;
   }
 
+  // 画像がラウンドされている場合のborderRadiusを計算
+  // 控えめな角丸にするため、画像サイズの15%程度を使用
+  const borderRadius = Math.min(imageWidth, imageHeight) * 0.15;
+
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
-        <Image
-          source={selectedImage}
-          style={[
-            styles.image,
-            {
-              width: imageWidth,
-              height: imageHeight,
-            }
-          ]}
-          resizeMode="contain"
-          onLoad={(e) => {
-            // 画像ロード時に実際のサイズを取得してアスペクト比を更新
-            const source = e.nativeEvent?.source;
-            if (source?.width && source?.height) {
-              setImageAspectRatio(source.width / source.height);
-            }
+        <View
+          style={{
+            width: imageWidth,
+            height: imageHeight,
+            borderRadius: borderRadius,
+            overflow: 'hidden',
           }}
-        />
+        >
+          <Image
+            source={selectedImage}
+            style={[
+              styles.image,
+              {
+                width: imageWidth,
+                height: imageHeight,
+              }
+            ]}
+            resizeMode="cover"
+            onLoad={(e) => {
+              // 画像ロード時に実際のサイズを取得してアスペクト比を更新
+              const source = e.nativeEvent?.source;
+              if (source?.width && source?.height) {
+                setImageAspectRatio(source.width / source.height);
+              }
+            }}
+          />
+        </View>
       </Animated.View>
     </View>
   );
